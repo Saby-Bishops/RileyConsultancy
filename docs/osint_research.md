@@ -1,5 +1,6 @@
 Selected OSINT tools:
 1. Shodan API
+
 ---Integrated into the RTTI System---
 
 Obtain API Key: Sign up at Shodan.io and get an API key.
@@ -23,6 +24,7 @@ Exploits API (GET /shodan/exploits/search): Find known exploits for identified s
 Account API (GET /account/profile): Retrieve API usage limits and plan details.
 
 2. Have I Been Pwned API
+
 ---Integrated into the RTTI System---
 
 Get API Key: Register at HIBP API and obtain an API key.
@@ -42,6 +44,7 @@ Pastebin Leak API (GET /pasteaccount/{email}): Retrieves email appearances in Pa
 Password API (Pwned Passwords) (GET /range/{hash}): Allows checking if a password has been leaked without exposing it.
 
 3. Virustotal API:
+
 ---Integrated into the RTTI System---
 
 API Key Registration: Sign up at VirusTotal and obtain a free or premium API key.
