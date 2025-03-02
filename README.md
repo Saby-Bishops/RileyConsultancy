@@ -1,36 +1,12 @@
-# RileyConsultancy
+# React + Vite
 
-## 📌 Project Overview
-This project aims to develop a **Real-Time Threat Intelligence and Risk Management Framework** for **ShopSmart Solutions**, an e-commerce business. The framework will integrate **Open-Source Intelligence (OSINT) tools**, align with **NIST Risk Management Framework (RMF) and Cybersecurity Framework (CSF) 2.0**, and utilize **real-time monitoring techniques** to enhance security posture.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## 🛠 Key Objectives
-- Implement **real-time threat intelligence gathering** using OSINT tools with free API access.
-- Conduct **risk assessment** and develop a risk treatment strategy.
-- Align with **NIST RMF & CSF 2.0** for structured risk management.
-- Utilize **Git for version control**, documentation, and project collaboration.
+Currently, two official plugins are available:
 
-## 📑 Project Scope
-1. **Risk Identification & Assessment**
-   - Identify key cyber threats to ShopSmart Solutions.
-   - Conduct a risk analysis using **NIST CSF** principles.
-2. **OSINT Integration & Automation**
-   - Evaluate and integrate open-source threat intelligence tools.
-   - Develop a **real-time risk rating system** using API-based threat feeds.
-3. **Risk Treatment & Security Framework Alignment**
-   - Align findings with **NIST RMF** and propose mitigation strategies.
-   - Implement **real-time security monitoring** and logging.
-4. **Project Management & Documentation**
-   - Maintain progress via **Git repository** with clear version control.
-   - Document methodologies, findings, and final recommendations.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## 🛠 Tools & Technologies
-- **OSINT Tools** (e.g., Shodan, VirusTotal, TheHarvester, SpiderFoot)
-- **NIST RMF & CSF 2.0** for structured risk management
-- **Git & GitHub** for version control and collaboration
-- **Python/Bash scripting** for automation and data analysis
+## Expanding the ESLint configuration
 
-## 📅 Project Timeline
-- **Week 1:** Research & define risk framework
-- **Week 2:** OSINT integration & data gathering
-- **Week 3:** Threat analysis & risk assessment
-- **Week 4:** Implement security measures & finalize documentation
+If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
