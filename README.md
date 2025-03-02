@@ -29,8 +29,11 @@ This project aims to develop a **Real-Time Threat Intelligence and Risk Manageme
 - **Git & GitHub** for version control and collaboration
 - **Python/Bash scripting** for automation and data analysis
 
-## 📅 Project Timeline
-- **Week 1:** Research & define risk framework
-- **Week 2:** OSINT integration & data gathering
-- **Week 3:** Threat analysis & risk assessment
-- **Week 4:** Implement security measures & finalize documentation
+## Operation of Intelligence Dashboard (Prototype)
+
+run the following command:
+```bash
+python src/app.py
+```
+
+navigate to localhost:5000
