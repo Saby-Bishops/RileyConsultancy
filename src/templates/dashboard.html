@@ -1,0 +1,97 @@
+{% extends "layout.html" %}
+
+{% block title %}Threat Intelligence Dashboard{% endblock %}
+
+{% block additional_css %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-summary">
+    <div class="summary-card total">
+        <div class="summary-icon"><i class="fas fa-shield-alt"></i></div>
+        <div class="summary-info">
+            <h3>Total Threats</h3>
+            <p id="total-threats">Loading...</p>
+        </div>
+    </div>
+    <div class="summary-card critical">
+        <div class="summary-icon"><i class="fas fa-radiation-alt"></i></div>
+        <div class="summary-info">
+            <h3>Critical</h3>
+            <p id="critical-threats">Loading...</p>
+        </div>
+    </div>
+    <div class="summary-card high">
+        <div class="summary-icon"><i class="fas fa-exclamation-circle"></i></div>
+        <div class="summary-info">
+            <h3>High</h3>
+            <p id="high-threats">Loading...</p>
+        </div>
+    </div>
+    <div class="summary-card blocked">
+        <div class="summary-icon"><i class="fas fa-ban"></i></div>
+        <div class="summary-info">
+            <h3>Blocked</h3>
+            <p id="blocked-threats">Loading...</p>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-charts">
+    <div class="chart-container">
+        <div class="chart-header">
+            <h3>Threat Trends (Last 7 Days)</h3>
+            <div class="chart-actions">
+                <button><i class="fas fa-ellipsis-v"></i></button>
+            </div>
+        </div>
+        <canvas id="trend-chart"></canvas>
+    </div>
+    
+    <div class="chart-container">
+        <div class="chart-header">
+            <h3>Threat Distribution</h3>
+            <div class="chart-actions">
+                <button><i class="fas fa-ellipsis-v"></i></button>
+            </div>
+        </div>
+        <canvas id="distribution-chart"></canvas>
+    </div>
+</div>
+
+<div class="threat-table-container">
+    <div class="table-header">
+        <h3>Recent Threat Activity</h3>
+        <div class="table-actions">
+            <button><i class="fas fa-filter"></i> Filter</button>
+            <button><i class="fas fa-download"></i> Export</button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="threat-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Source</th>
+                    <th>Target</th>
+                    <th>Timestamp</th>
+                    <th>Details</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="threat-table-body">
+                <tr>
+                    <td colspan="8" class="loading-cell">Loading threat data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
