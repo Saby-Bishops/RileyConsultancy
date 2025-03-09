@@ -156,6 +156,44 @@ body {
     background-color: #2a3447;
 }
 
+.scan-btn {
+    background-color: #00b0ff;
+    border: none;
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.scan-btn i {
+    margin-right: 8px;
+}
+
+.scan-btn:hover {
+    background-color: #0091ea;
+}
+
+.rescan-btn {
+    background-color: #ff3b30;
+    border: none;
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.rescan-btn i {
+    margin-right: 8px;
+}
+
+.rescan-btn:hover {
+    background-color: #d32f2f;
+}
+
 .user-profile {
     display: flex;
     align-items: center;

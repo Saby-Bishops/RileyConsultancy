@@ -1,0 +1,25 @@
+<header class="main-header">
+    {% block header_content %}
+    <div class="search-bar">
+        <input type="text" placeholder="Search...">
+        <button><i class="fas fa-search"></i></button>
+    </div>
+    <div class="user-actions">
+        {% if user_actions %}
+            {% for action in user_actions %}
+                {% if action.method == 'post' %}
+                    <form action="{{ action.url }}" method="post" style="display: inline;">
+                        <button type="submit" class="{{ action.class }}">
+                            <i class="fas {{ action.icon }}"></i> {{ action.text }}
+                        </button>
+                    </form>
+                {% else %}
+                    <a href="{{ action.url }}" class="{{ action.class }}">
+                        <i class="fas {{ action.icon }}"></i> {{ action.text }}
+                    </a>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endblock %}
+</header>

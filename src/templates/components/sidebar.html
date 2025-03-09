@@ -1,0 +1,20 @@
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <h2><i class="fas fa-shield-alt"></i> Riley Consultancy</h2>
+    </div>
+    <nav class="sidebar-nav">
+        <ul>
+            <li {% if request.path == '/' %}class="active"{% endif %}><a href="/"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+            <li {% if '/vulnerabilities' in request.path %}class="active"{% endif %}><a href="/vulnerabilities"><i class="fas fa-bug"></i> Vulnerabilities</a></li>
+            <li><a href="#"><i class="fas fa-exclamation-triangle"></i> Alerts</a></li>
+            <li><a href="#"><i class="fas fa-globe"></i> Threat Map</a></li>
+            <li><a href="#"><i class="fas fa-chart-line"></i> Analytics</a></li>
+            <li><a href="#"><i class="fas fa-cog"></i> Settings</a></li>
+        </ul>
+    </nav>
+    {% if show_last_updated | default(true) %}
+    <div class="sidebar-footer">
+        <p>Last updated: <span id="last-updated">Loading...</span></p>
+    </div>
+    {% endif %}
+</aside>
