@@ -14,12 +14,14 @@ CREATE TABLE threats
 (
     id serial,
     asset_id integer NOT NULL,
-    name varchar(255),
-    risk_level integer,
+    threat_name varchar(255),
+    vulnerability_description text,
+    likelihood integer,
+    impact integer,
 
     PRIMARY KEY (id),
-    FOREIGN KEY (asset_id) REFERENCES assets (id)
-    CHECK (risk_level BETWEEN 1 AND 10)
+    FOREIGN KEY (asset_id) REFERENCES assets (id),
+    UNIQUE (threat_name)
 );
 
 CREATE TABLE vulnerabilities
@@ -30,7 +32,7 @@ CREATE TABLE vulnerabilities
     description text,
 
     PRIMARY KEY (id),
-    FOREIGN KEY (asset_id) REFERENCES asset (id),
+    FOREIGN KEY (asset_id) REFERENCES assets (id)
 );
 
 CREATE TABLE risk_ratings
@@ -40,9 +42,8 @@ CREATE TABLE risk_ratings
     threat_id integer,
     vulnerability_id integer,
 
-
-    PRIMARY KEY id,
-    FOREIGN KEY asset_id REFERENCES assets (id),
-    FOREIGN KEY threat_id REFERENCES threats (id),
-    FOREIGN KEY vulnerability_id REFERENCES vulnerability (id)
+    PRIMARY KEY (id),
+    FOREIGN KEY (asset_id) REFERENCES assets (id),
+    FOREIGN KEY (threat_id) REFERENCES threats (id),
+    FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities (id)
 );
