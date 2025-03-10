@@ -1,15 +1,25 @@
 # app.py
-from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, session
+from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, session, send_file
 import datetime
 import random
 import os
-from api.gvm_integration import GVMScanner
 import threading
 import json
 import logging
+from werkzeug.utils import secure_filename
+
+
+from api.osint.email_search import EmailSearch
+from api.osint.username_search import UsernameSearch
+from api.osint.osint_data import OsintData
+from api.gvm_integration import GVMScanner
 
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['ALLOWED_EXTENSIONS'] = {'csv'}
 app.secret_key = os.urandom(24)  # For flash messages
+data_access = OsintData('osint.db')
+
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,27 +39,6 @@ scan_results = {
     'status': 'None',
     'target': 'None'
 }
-
-# Sample threat intelligence data - would be replaced with real data sources
-def generate_sample_threats():
-    threat_types = ["Malware", "Phishing", "DDoS", "Zero-day", "Ransomware", "APT"]
-    severity_levels = ["Critical", "High", "Medium", "Low"]
-    countries = ["United States", "China", "Russia", "North Korea", "Iran", "Unknown"]
-    
-    threats = []
-    for i in range(10):
-        timestamp = datetime.datetime.now() - datetime.timedelta(minutes=random.randint(5, 120))
-        threats.append({
-            "id": f"THREAT-{random.randint(1000, 9999)}",
-            "type": random.choice(threat_types),
-            "severity": random.choice(severity_levels),
-            "source": random.choice(countries),
-            "target": random.choice(countries),
-            "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-            "details": f"Detected suspicious activity matching known {random.choice(threat_types).lower()} patterns"
-        })
-    
-    return sorted(threats, key=lambda x: x["timestamp"], reverse=True)
 
 # Run scan in background thread
 def run_scan_thread(username, password, target_name, target_hosts):
@@ -85,6 +74,24 @@ def index():
     user_actions = [{'url': '/refresh', 'icon': 'fa-search', 'text': 'Refresh', 'class': 'refresh-btn'}]
     return render_template('dashboard.html', user_actions=user_actions)
 
+@app.route('/api/threats')
+def get_threats():
+    """API endpoint to get threat data"""
+    threats = data_access.get_threat_data()
+    return jsonify(threats)
+
+@app.route('/api/employee/<int:employee_id>')
+def get_employee(employee_id):
+    """API endpoint to get employee details"""
+    employee = data_access.get_employee_details(employee_id)
+    return jsonify(employee)
+
+@app.route('/api/export/threats')
+def export_threats():
+    """Export threats data as JSON"""
+    filename = data_access.export_threats_json()
+    return send_file(filename, as_attachment=True)
+
 @app.route('/vulnerabilities')
 def vulnerabilities():
     user_actions = [
@@ -93,9 +100,52 @@ def vulnerabilities():
     ]
     return render_template('vulnerabilities.html', user_actions=user_actions)
 
-@app.route('/api/threats')
-def get_threats():
-    return jsonify(generate_sample_threats())
+@app.route('/threats')
+def threats():
+    user_actions = [
+        {'url': '/api/export/threats', 'icon': 'fa-download', 'text': 'Export', 'class': 'export-btn'},
+        {'url': '/import', 'icon': 'fa-upload', 'text': 'Import', 'class': 'import-btn'}
+    ]
+    return render_template('threats.html', user_actions=user_actions)
+
+def allowed_file(filename):
+    """Check if the uploaded file is allowed"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+@app.route('/import', methods=['GET', 'POST'])
+def import_employees():
+    """Import employees from CSV file"""
+    if request.method == 'POST':
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        
+        file = request.files['file']
+        
+        # Check if file was selected
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(request.url)
+        
+        # Check if file is allowed
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            
+            # Import employees from CSV
+            result = data_access.import_employees_from_csv(file_path)
+            
+            if result["success"]:
+                flash(f'Successfully imported {result["imported_count"]} employees!')
+            else:
+                flash(f'Error importing employees: {result["error"]}')
+                
+            return redirect(url_for('threats'))
+        
+    return render_template('import_csv.html')
 
 @app.route('/api/stats')
 def get_stats():

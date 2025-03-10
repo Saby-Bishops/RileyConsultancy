@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+
+{% block title %}Threats{% endblock %}
+
+{% block additional_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/threats.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="threat-table-container">
+    <div class="table-header">
+        <h3>Detected Potential Threats</h3>
+        <div class="table-actions">
+            <button><i class="fas fa-filter"></i> Filter</button>
+            <button><i class="fas fa-download"></i> Export</button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="threat-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Associated Accounts</th>
+                    <th>Email Found</th>
+                </tr>
+            </thead>
+            <tbody id="vulnerability-table-body">
+                <tr>
+                    <td colspan="8" class="loading-cell">No threat data available...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/threats.js') }}"></script>
+{% endblock %}
