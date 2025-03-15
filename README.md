@@ -31,7 +31,12 @@ This project aims to develop a **Real-Time Threat Intelligence and Risk Manageme
 
 ## Operation of Intelligence Dashboard (Prototype)
 
-run the following command:
+Install dependencies:
+```bash
+pip install -r src/requirements.txt
+```
+
+Then run the following command:
 ```bash
 python src/app.py
 ```

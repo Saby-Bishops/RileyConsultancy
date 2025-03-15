@@ -1,0 +1,93 @@
+{% extends "layout.html" %}
+
+{% block title %}Vulnerability Scanner - ThreatGuard{% endblock %}
+
+{% block additional_css %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-summary">
+    <div class="summary-card total">
+        <div class="summary-icon"><i class="fas fa-bug"></i></div>
+        <div class="summary-info">
+            <h3>Total Vulnerabilities</h3>
+            <p id="total-vulns">Loading...</p>
+        </div>
+    </div>
+    <div class="summary-card critical">
+        <div class="summary-icon"><i class="fas fa-radiation-alt"></i></div>
+        <div class="summary-info">
+            <h3>Critical</h3>
+            <p id="critical-vulns">Loading...</p>
+        </div>
+    </div>
+    <div class="summary-card high">
+        <div class="summary-icon"><i class="fas fa-exclamation-circle"></i></div>
+        <div class="summary-info">
+            <h3>High</h3>
+            <p id="high-vulns">Loading...</p>
+        </div>
+    </div>
+    <div class="summary-card status">
+        <div class="summary-icon"><i class="fas fa-hourglass-half"></i></div>
+        <div class="summary-info">
+            <h3>Scan Status</h3>
+            <p id="scan-status">None</p>
+        </div>
+    </div>
+</div>
+
+<div class="scan-details">
+    <div class="scan-target">
+        <strong>Target:</strong> <span id="scan-target">None</span>
+    </div>
+    <div class="scan-timestamp">
+        <strong>Last Scan:</strong> <span id="scan-timestamp">None</span>
+    </div>
+</div>
+
+<div class="vulnerability-chart-container">
+    <div class="chart-container">
+        <div class="chart-header">
+            <h3>Vulnerability Severity Distribution</h3>
+        </div>
+        <canvas id="vuln-distribution-chart"></canvas>
+    </div>
+</div>
+
+<div class="threat-table-container">
+    <div class="table-header">
+        <h3>Detected Vulnerabilities</h3>
+        <div class="table-actions">
+            <button><i class="fas fa-filter"></i> Filter</button>
+            <button><i class="fas fa-download"></i> Export</button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="threat-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Host</th>
+                    <th>Port</th>
+                    <th>Severity</th>
+                    <th>CVSS</th>
+                    <th>Timestamp</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="vulnerability-table-body">
+                <tr>
+                    <td colspan="8" class="loading-cell">No vulnerability data available...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/vulnerabilities.js') }}"></script>
+{% endblock %}
