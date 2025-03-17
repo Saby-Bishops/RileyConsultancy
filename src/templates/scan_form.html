@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+
+{% block title %}New Vulnerability Scan{% endblock %}
+
+{% set show_last_updated = false %}
+
+{% block header_content %}
+<h1><i class="fas fa-bug"></i> New Vulnerability Scan</h1>
+<div class="user-profile">
+    <span>Security Analyst</span>
+    <i class="fas fa-user-circle"></i>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="scan-form-container">
+    <!-- Form content... -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script>
+    // JavaScript code from scan_form.html
+</script>
+{% endblock %}

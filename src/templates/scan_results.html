@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scan Results</title>
+    <link rel="stylesheet" type="text/css" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Scan Results</h1>
+        <div class="results">
+            <p>Scan ID: {{ scan_id }}</p>
+            <p>Result: <a href="{{ result_url }}">{{ result_url }}</a></p>
+            <p>Scan Date: {{ scan_date }}</p>
+            <p>Scan Time: {{ scan_time }}</p>
+            <p>Scan Duration: {{ scan_duration }}</p>
+            <p>Scan Status: {{ scan_status }}</p>
+            <p>Scan Progress: {{ scan_progress }}%</p>
+            <p>Scan Result: {{ scan_result }}</p>
+        </div>
+    </div>
+    <a href="{{ url_for('scan') }}">Start New Scan</a>
+</body>
+</html>
