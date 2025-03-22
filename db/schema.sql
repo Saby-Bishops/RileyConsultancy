@@ -1,13 +1,10 @@
-CREATE TABLE assets
-(
-    id serial,
-    name varchar(255) NOT NULL,
-    category varchar(50),
-    description text,
-    risk_level integer,
-
-    PRIMARY KEY (id),
-    CHECK (risk_level BETWEEN 1 AND 10)
+-- Table for storing asset details
+CREATE TABLE assets (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(50),
+    description TEXT,
+    risk_level INTEGER CHECK (risk_level BETWEEN 1 AND 10)
 );
 
 CREATE TABLE threats
