@@ -73,6 +73,10 @@ def run_scan_thread(username, password, target_name, target_hosts):
         scan_results['status'] = f"Error: {str(e)}"
 
 # Routes
+# @app.route("/")
+# def home():
+#     return "Hello from Flask via Apache!"
+
 @app.route('/')
 def index():
     user_actions = [{'url': '/refresh', 'icon': 'fa-search', 'text': 'Refresh', 'class': 'refresh-btn'}]

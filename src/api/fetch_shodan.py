@@ -30,22 +30,38 @@ def fetch_threat_data():
 def store_threat_data(threat_data):
     if not DB_CONNECTION_STRING:
         raise ValueError("No DATABASE_URL found in environment variables")
-    
+
     conn = psycopg2.connect(DB_CONNECTION_STRING)
     cursor = conn.cursor()
-    
+
     for threat in threat_data.get('matches', []):
+        threat_name = threat.get('name', 'Unknown Threat')
+        vulnerability_description = threat.get('description', 'No description available')
+        likelihood = threat.get('likelihood', 1)  # Default value if missing
+        impact = threat.get('impact', 1)  # Default value if missing
+
+        # Ensure asset_id exists; if missing, create a default asset
         asset_id = threat.get('asset_id')
-        threat_name = threat.get('name')
-        vulnerability_description = threat.get('description')
-        likelihood = threat.get('likelihood')
-        impact = threat.get('impact')
-        
+        if asset_id is None:
+            cursor.execute(
+                sql.SQL("INSERT INTO assets (name, category, description, risk_level) VALUES (%s, %s, %s, %s) RETURNING id"),
+                ('Unknown Asset', 'Uncategorized', 'Auto-created asset', 5)
+            )
+            asset_id = cursor.fetchone()[0]  # Fetch the newly created asset ID
+
+        # Insert threat data (if it doesn't already exist)
         cursor.execute(
-            sql.SQL("INSERT INTO threats (asset_id, threat_name, vulnerability_description, likelihood, impact) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (threat_name) DO NOTHING"),
+            sql.SQL("""
+                INSERT INTO threats (asset_id, threat_name, vulnerability_description, likelihood, impact) 
+                VALUES (%s, %s, %s, %s, %s) 
+                ON CONFLICT (threat_name) DO UPDATE SET 
+                vulnerability_description = EXCLUDED.vulnerability_description,
+                likelihood = EXCLUDED.likelihood,
+                impact = EXCLUDED.impact
+            """),
             (asset_id, threat_name, vulnerability_description, likelihood, impact)
         )
-    
+
     conn.commit()
     cursor.close()
     conn.close()
