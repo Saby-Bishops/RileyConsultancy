@@ -1,26 +1,110 @@
 {% extends "layout.html" %}
-
 {% block title %}New Vulnerability Scan{% endblock %}
-
 {% set show_last_updated = false %}
-
 {% block header_content %}
 <h1><i class="fas fa-bug"></i> New Vulnerability Scan</h1>
 <div class="user-profile">
-    <span>Security Analyst</span>
-    <i class="fas fa-user-circle"></i>
+<span>Security Analyst</span>
+<i class="fas fa-user-circle"></i>
 </div>
 {% endblock %}
-
 {% block content %}
 <div class="scan-form-container">
-    <!-- Form content... -->
+    <form method="post" action="{{ url_for('scan') }}" id="scan-form">
+        <div class="form-section">
+            <h3>Target Configuration</h3>
+            <div class="form-group">
+                <label for="target_type">Target Type</label>
+                <select id="target_type" name="target_type" class="form-control">
+                    <option value="new">New Target</option>
+                    <option value="existing">Existing Target</option>
+                </select>
+            </div>
+            
+            <!-- New Target Options -->
+            <div id="new-target-options">
+                <div class="form-group">
+                    <label for="target_name">Target Name</label>
+                    <input type="text" id="target_name" name="target_name" class="form-control" placeholder="e.g., Web Server Scan">
+                </div>
+                <div class="form-group">
+                    <label for="target_hosts">Target Hosts</label>
+                    <textarea id="target_hosts" name="target_hosts" class="form-control" placeholder="IP addresses, hostnames, or CIDR notation (one per line)"></textarea>
+                    <small class="form-text text-muted">Examples: 192.168.1.1, example.com, 10.0.0.0/24</small>
+                </div>
+            </div>
+            
+            <!-- Existing Target Options -->
+            <div id="existing-target-options" style="display: none;">
+                <div class="form-group">
+                    <label for="existing_target_id">Select Target</label>
+                    <select id="existing_target_id" name="existing_target_id" class="form-control">
+                        {% if scan_options and scan_options.targets %}
+                            {% for target in scan_options.targets %}
+                                <option value="{{ target.id }}">{{ target.name }}</option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="">No targets available</option>
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h3>Scan Configuration</h3>
+            <div class="form-group">
+                <label for="scan_config_id">Scan Config</label>
+                <select id="scan_config_id" name="scan_config_id" class="form-control" required>
+                    {% if scan_options and scan_options.configs %}
+                        {% for config in scan_options.configs %}
+                            <option value="{{ config.id }}">{{ config.name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">No scan configs available</option>
+                    {% endif %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="scanner_id">Scanner</label>
+                <select id="scanner_id" name="scanner_id" class="form-control" required>
+                    {% if scan_options and scan_options.scanners %}
+                        {% for scanner in scan_options.scanners %}
+                            <option value="{{ scanner.id }}">{{ scanner.name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">No scanners available</option>
+                    {% endif %}
+                </select>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Start Scan</button>
+            <a href="{{ url_for('vulnerabilities') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
 </div>
 {% endblock %}
-
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
-    // JavaScript code from scan_form.html
+$(document).ready(function() {
+    // Toggle between new and existing target options
+    $('#target_type').change(function() {
+        if ($(this).val() === 'new') {
+            $('#new-target-options').show();
+            $('#existing-target-options').hide();
+            $('#target_name, #target_hosts').prop('required', true);
+            $('#existing_target_id').prop('required', false);
+        } else {
+            $('#new-target-options').hide();
+            $('#existing-target-options').show();
+            $('#target_name, #target_hosts').prop('required', false);
+            $('#existing_target_id').prop('required', true);
+        }
+    });
+});
 </script>
 {% endblock %}

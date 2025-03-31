@@ -94,11 +94,46 @@ def export_threats():
 
 @app.route('/vulnerabilities')
 def vulnerabilities():
+    # Check if GVM credentials are already in session
+    if 'gvm_username' not in session or 'gvm_password' not in session:
+        # No credentials, redirect to GVM login page with a return URL
+        return redirect(url_for('gvm_login', next=url_for('vulnerabilities')))
+    
     user_actions = [
         {'url': '/scan', 'icon': 'fa-search', 'text': 'New Scan', 'class': 'scan-btn'},
         {'url': '/rescan', 'icon': 'fa-sync-alt', 'text': 'Rescan', 'class': 'rescan-btn', 'method': 'post'}
     ]
     return render_template('vulnerabilities.html', user_actions=user_actions)
+
+@app.route('/gvm_login', methods=['GET', 'POST'])
+def gvm_login():
+    next_url = request.args.get('next', url_for('vulnerabilities'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if not username or not password:
+            flash('Username and password are required', 'error')
+            return render_template('gvm_login.html', next=next_url)
+        
+        # Verify credentials with GVM
+        scanner = GVMScanner()
+        result = scanner.test_connection(username, password)
+        
+        if 'error' in result:
+            flash(result['error'], 'error')
+            return render_template('gvm_login.html', next=next_url)
+        
+        # Store credentials in session
+        session['gvm_username'] = username
+        session['gvm_password'] = password
+        
+        # Redirect to the originally requested page
+        return redirect(next_url)
+    
+    # GET request - show login form
+    return render_template('gvm_login.html', next=next_url)
 
 @app.route('/threats')
 def threats():
@@ -191,10 +226,14 @@ def get_vulnerabilities():
 
 @app.route('/scan', methods=['GET', 'POST'])
 def scan():
+    # Make sure user is authenticated with GVM
+    if 'gvm_username' not in session or 'gvm_password' not in session:
+        return redirect(url_for('gvm_login', next=url_for('scan')))
+    
     if request.method == 'POST':
-        # Handle form submission to start scan
-        username = request.form.get('username')
-        password = request.form.get('password')
+        # Use stored credentials
+        username = session['gvm_username']
+        password = session['gvm_password']
         target_name = request.form.get('target_name')
         target_hosts = request.form.get('target_hosts')
         scan_config_id = request.form.get('scan_config_id')
@@ -277,7 +316,7 @@ def get_scan_options():
     return jsonify(options)
 
 @app.route('/scan_status')
-def get_scan_status():
+def scan_status():
     if 'task_id' not in session:
         flash('No scan in progress', 'error')
         return redirect(url_for('scan'))
@@ -291,7 +330,7 @@ def get_scan_status():
     
     return render_template('scan_status.html', status=status)
 
-@app.route('/scan_results')
+@app.route('/get_scan_results')
 def get_scan_results():
     if 'task_id' not in session:
         flash('No scan results available', 'error')
@@ -299,8 +338,18 @@ def get_scan_results():
     
     scanner = GVMScanner()
     results = scanner.get_results(username=session['gvm_username'], password=session['gvm_password'])
-
-    return render_template('scan_results.html', results=results)
+    
+    # Add missing template variables
+    return render_template('scan_results.html', 
+                          results=results,
+                          scan_id=session.get('task_id', 'N/A'),
+                          result_url=url_for('get_scan_results', _external=True),
+                          scan_date=datetime.datetime.now().strftime("%Y-%m-%d"),
+                          scan_time=datetime.datetime.now().strftime("%H:%M:%S"),
+                          scan_duration="N/A",  # You might want to calculate this
+                          scan_status="Complete",
+                          scan_progress=100,
+                          scan_result="Complete")
 
 
 @app.route('/test')

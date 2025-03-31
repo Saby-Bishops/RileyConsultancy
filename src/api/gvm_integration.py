@@ -242,3 +242,16 @@ class GVMScanner:
             }
         except Exception as e:
             return {"error": str(e)}
+
+    def test_connection(self, username, password):
+        """Test GVM connection with provided credentials"""
+        try:
+            # Try to establish a connection with GVM using these credentials
+            # This will depend on how your GVMScanner class is implemented
+            # For example:
+            connection = self.authenticate(username, password)
+            
+            # If no exception was raised, connection was successful
+            return {'status': 'success'}
+        except Exception as e:
+            return {'error': f'Authentication failed: {str(e)}'}
