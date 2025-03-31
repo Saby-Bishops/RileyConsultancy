@@ -28,7 +28,8 @@ VALUES
     (
         "workstation_it",
         "hardware",
-        "most permissions"),
+        "most permissions"
+    ),
     (
         "workstation_csr",
         "hardware",

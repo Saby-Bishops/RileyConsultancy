@@ -1,50 +1,41 @@
-CREATE TABLE assets
-(
-    id serial,
-    name varchar(255) NOT NULL,
-    category varchar(50),
-    description text,
-    risk_level integer,
-
-    PRIMARY KEY (id),
-    CHECK (risk_level BETWEEN 1 AND 10)
+CREATE TABLE assets (
+    id INT AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(50),
+    description TEXT,
+    risk_level INT,
+    PRIMARY KEY (id)
+    -- Optional CHECK: risk_level BETWEEN 1 AND 10 (not enforced by MariaDB unless specified)
 );
 
-CREATE TABLE threats
-(
-    id serial,
-    asset_id integer NOT NULL,
-    name varchar(255),
-    risk_level integer,
-
+CREATE TABLE threats (
+    id INT AUTO_INCREMENT,
+    asset_id INT NOT NULL,
+    name VARCHAR(255),
+    risk_level INT,
     PRIMARY KEY (id),
-    FOREIGN KEY (asset_id) REFERENCES assets (id)
-    CHECK (risk_level BETWEEN 1 AND 10)
+    FOREIGN KEY (asset_id) REFERENCES assets(id)
+    -- Optional CHECK: risk_level BETWEEN 1 AND 10
 );
 
-CREATE TABLE vulnerabilities
-(
-    id serial,
-    asset_id integer,
-    name varchar(255),
-    description text,
-
+CREATE TABLE vulnerabilities (
+    id INT AUTO_INCREMENT,
+    asset_id INT,
+    name VARCHAR(255),
+    description TEXT,
     PRIMARY KEY (id),
-    FOREIGN KEY (asset_id) REFERENCES asset (id),
+    FOREIGN KEY (asset_id) REFERENCES assets(id)
 );
 
-CREATE TABLE risk_ratings
-(
-    id serial,
-    asset_id integer,
-    threat_id integer,
-    vulnerability_id integer,
-
-
-    PRIMARY KEY id,
-    FOREIGN KEY asset_id REFERENCES assets (id),
-    FOREIGN KEY threat_id REFERENCES threats (id),
-    FOREIGN KEY vulnerability_id REFERENCES vulnerability (id)
+CREATE TABLE risk_ratings (
+    id INT AUTO_INCREMENT,
+    asset_id INT,
+    threat_id INT,
+    vulnerability_id INT,
+    PRIMARY KEY (id),
+    FOREIGN KEY (asset_id) REFERENCES assets(id),
+    FOREIGN KEY (threat_id) REFERENCES threats(id),
+    FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities(id)
 );
 
 -- Table for storing employee information
