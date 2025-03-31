@@ -7,12 +7,16 @@ import threading
 import json
 import logging
 from werkzeug.utils import secure_filename
+import mysql.connector
 
 
 from api.osint.email_search import EmailSearch
 from api.osint.username_search import UsernameSearch
 from api.osint.osint_data import OsintData
 from api.gvm_integration import GVMScanner
+
+print("Content-type: text/html\n")
+print("Hello, Python is working with XAMPP!")
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -69,16 +73,40 @@ def run_scan_thread(username, password, target_name, target_hosts):
         scan_results['status'] = f"Error: {str(e)}"
 
 # Routes
+# @app.route("/")
+# def home():
+#     return "Hello from Flask via Apache!"
+
 @app.route('/')
 def index():
     user_actions = [{'url': '/refresh', 'icon': 'fa-search', 'text': 'Refresh', 'class': 'refresh-btn'}]
     return render_template('dashboard.html', user_actions=user_actions)
 
 @app.route('/api/threats')
+# def get_threats():
+#     """API endpoint to get threat data"""
+#     threats = data_access.get_threat_data()
+#     return jsonify(threats)
 def get_threats():
-    """API endpoint to get threat data"""
-    threats = data_access.get_threat_data()
-    return jsonify(threats)
+    """Fetch cleaned threat data from MySQL"""
+    try:
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="shopsmart"
+        )
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT ip_address, domain, threat_type, threat_level, source, detected_at FROM threat_data ORDER BY detected_at DESC")
+        threats = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify(threats)  # Return only useful fields
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/api/employee/<int:employee_id>')
 def get_employee(employee_id):
