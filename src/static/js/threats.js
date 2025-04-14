@@ -32,10 +32,10 @@ async function fetchThreats() {
 }
 
 function displayThreats(threats) {
-    const tableBody = document.getElementById('vulnerability-table-body');
+    const tableBody = document.getElementById('threat-table-body');
     
     if (!threats || threats.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="4" class="loading-cell">No threat data available...</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="loading-cell">No threat data available...</td></tr>';
         return;
     }
     
@@ -44,26 +44,20 @@ function displayThreats(threats) {
     threats.forEach(threat => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${threat.first_name} ${threat.last_name}</td>
-            <td>${threat.email || 'Not found'}</td>
-            <td>
-                ${threat.account_count > 0 
-                  ? `${threat.account_count} accounts (${threat.unique_sites} sites)` 
-                  : 'None found'}
-            </td>
-            <td>${threat.email_found ? '<span class="found">Yes</span>' : '<span class="not-found">No</span>'}</td>
+            <td>${threat.ip_address}</td>
+            <td>${threat.domain || 'N/A'}</td>
+            <td>${threat.threat_type}</td>
+            <td>${threat.threat_level}</td>
+            <td>${threat.source}</td>
+            <td>${threat.detected_at}</td>
         `;
-        
-        // Add click event to show details
-        row.dataset.employeeId = threat.employee_id;
-        row.addEventListener('click', () => showEmployeeDetails(threat.employee_id));
         
         tableBody.appendChild(row);
     });
 }
 
 function displayError(message) {
-    const tableBody = document.getElementById('vulnerability-table-body');
+    const tableBody = document.getElementById('threat-table-body');
     tableBody.innerHTML = `<tr><td colspan="4" class="error-cell">${message}</td></tr>`;
 }
 

@@ -4,6 +4,8 @@ from gvm.protocols.latest import Gmp
 from gvm.transforms import EtreeTransform
 import datetime
 import logging
+import subprocess
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,9 +14,49 @@ logger = logging.getLogger(__name__)  # Get a logger for this module
 class GVMScanner:
     def __init__(self, socket_path='/var/run/gvmd/gvmd.sock'):
         self.socket_path = socket_path
-        connection = UnixSocketConnection(path=self.socket_path)
-        transform = EtreeTransform()
-        self.gmp = Gmp(connection, transform=transform)
+        self.results = []
+
+    def start_gvm_service(self):
+        """Try to start the GVM service if it's not running"""
+        try:
+            logger.info("Attempting to start GVM service...")
+            # Using systemctl to start the service
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'start', 'gvmd'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode == 0:
+                logger.info("GVM service started successfully")
+                return True
+            else:
+                logger.error(f"Failed to start GVM service: {result.stderr}")
+                return False
+        except Exception as e:
+            logger.error(f"Error while starting GVM service: {e}")
+            return False
+        
+    def check_socket_exists(self):
+        """Check if the GVM socket file exists"""
+        exists = os.path.exists(self.socket_path)
+        if exists:
+            logger.info(f"Socket {self.socket_path} exists")
+        else:
+            logger.warning(f"Socket {self.socket_path} does not exist")
+        return exists
+    
+    def create_connection(self):
+        """Create a new connection to GVM"""
+        try:
+            connection = UnixSocketConnection(path=self.socket_path)
+            transform = EtreeTransform()
+            self.gmp = Gmp(connection, transform=transform)
+            return True
+        except Exception as e:
+            logger.error(f"Error creating connection: {e}")
+            return False
     
     def authenticate(self, username, password):
         """Authenticate with the GVM service"""
@@ -244,14 +286,29 @@ class GVMScanner:
             return {"error": str(e)}
 
     def test_connection(self, username, password):
-        """Test GVM connection with provided credentials"""
+        """Test GVM connection with provided credentials and ensure service is running"""
         try:
-            # Try to establish a connection with GVM using these credentials
-            # This will depend on how your GVMScanner class is implemented
-            # For example:
-            connection = self.authenticate(username, password)
+            # First check if the socket exists
+            if not self.check_socket_exists():
+                # Socket doesn't exist, try to start the service
+                if not self.start_gvm_service():
+                    return {'status': 'error', 'message': 'GVM service is not running and could not be started'}
+                
+                # Check again after trying to start
+                if not self.check_socket_exists():
+                    return {'status': 'error', 'message': 'GVM service appears to be started but socket file still missing'}
             
-            # If no exception was raised, connection was successful
-            return {'status': 'success'}
+            # Now try to create the connection
+            if not self.create_connection():
+                return {'status': 'error', 'message': 'Failed to establish connection to GVM socket'}
+            
+            # Finally try to authenticate
+            if not self.authenticate(username, password):
+                return {'status': 'error', 'message': 'Authentication failed with provided credentials'}
+            
+            # If we got here, everything worked
+            return {'status': 'success', 'message': 'Successfully connected and authenticated with GVM'}
+            
         except Exception as e:
-            return {'error': f'Authentication failed: {str(e)}'}
+            logger.error(f"Unexpected error in test_connection: {e}")
+            return {'status': 'error', 'message': f'Unexpected error: {str(e)}'}

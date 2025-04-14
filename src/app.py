@@ -3,17 +3,14 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, f
 import datetime
 import random
 import os
-import threading
-import json
 import logging
 from werkzeug.utils import secure_filename
-import mysql.connector
-
 
 from api.osint.email_search import EmailSearch
 from api.osint.username_search import UsernameSearch
 from api.osint.osint_data import OsintData
 from api.gvm_integration import GVMScanner
+from api.osint.open_phish import fetch_phishing_urls, extract_domains
 
 print("Content-type: text/html\n")
 print("Hello, Python is working with XAMPP!")
@@ -22,38 +19,30 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'csv'}
 app.secret_key = os.urandom(24)  # For flash messages
-data_access = OsintData('osint.db')
+db_path = os.path.join(os.path.dirname(__file__), os.pardir, 'db', 'osint.db')
+data_access = OsintData(db_path)
+data_access._ensure_tables_exist()
 
+scanner = GVMScanner()
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)  # Get a logger for this module
 
-# Store scan results
-scan_results = {
-    'last_scan': None,
-    'results': [],
-    'summary': {
-        'Critical': 0,
-        'High': 0, 
-        'Medium': 0,
-        'Low': 0
-    },
-    'total': 0,
-    'status': 'None',
-    'target': 'None'
-}
-
 # Run scan in background thread
 def run_scan_thread(username, password, target_name, target_hosts):
-    global scan_results
+    scan_results = {
+        'status': 'Pending',
+        'target': target_hosts,
+        'results': None,
+        'summary': None,
+        'total': 0,
+        'last_scan': None
+    }
     
     # Update status
     scan_results['status'] = 'Running'
     scan_results['target'] = target_hosts
-    
-    # Initialize scanner
-    scanner = GVMScanner()
     
     # Run scan
     try:
@@ -69,13 +58,9 @@ def run_scan_thread(username, password, target_name, target_hosts):
         scan_results['total'] = results['total']
         scan_results['last_scan'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         scan_results['status'] = 'Completed'
+        scanner.results.append(scan_results)
     except Exception as e:
         scan_results['status'] = f"Error: {str(e)}"
-
-# Routes
-# @app.route("/")
-# def home():
-#     return "Hello from Flask via Apache!"
 
 @app.route('/')
 def index():
@@ -83,26 +68,13 @@ def index():
     return render_template('dashboard.html', user_actions=user_actions)
 
 @app.route('/api/threats')
-# def get_threats():
-#     """API endpoint to get threat data"""
-#     threats = data_access.get_threat_data()
-#     return jsonify(threats)
 def get_threats():
-    """Fetch cleaned threat data from MySQL"""
+    """Fetch cleaned threat data from db"""
     try:
-        conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="",
-            database="shopsmart"
-        )
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("SELECT ip_address, domain, threat_type, threat_level, source, detected_at FROM threat_data ORDER BY detected_at DESC")
-        threats = cursor.fetchall()
-
-        cursor.close()
-        conn.close()
+        with data_access._get_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT ip_address, domain, threat_type, threat_level, source, detected_at FROM threat_data ORDER BY detected_at DESC")
+            threats = cursor.fetchall()
 
         return jsonify(threats)  # Return only useful fields
     except Exception as e:
@@ -146,7 +118,6 @@ def gvm_login():
             return render_template('gvm_login.html', next=next_url)
         
         # Verify credentials with GVM
-        scanner = GVMScanner()
         result = scanner.test_connection(username, password)
         
         if 'error' in result:
@@ -212,6 +183,11 @@ def import_employees():
 
 @app.route('/api/stats')
 def get_stats():
+    
+    if len(scanner.results) == 0:
+        # No scan results available
+        return jsonify({"error": "No scan results available"})
+    
     # Combine regular threat stats with vulnerability stats
     stats = {
         "total_threats": random.randint(150, 300),
@@ -222,35 +198,49 @@ def get_stats():
         "blocked": random.randint(120, 250),
         "investigating": random.randint(10, 30),
         "vulnerabilities": {
-            "total": scan_results['total'],
-            "critical": scan_results['summary'].get('Critical', 0),
-            "high": scan_results['summary'].get('High', 0),
-            "medium": scan_results['summary'].get('Medium', 0),
-            "low": scan_results['summary'].get('Low', 0),
-            "last_scan": scan_results['last_scan'],
-            "status": scan_results['status']
+            "total":scanner.results[-1]['total'],
+            "critical": scanner.results[-1]['summary'].get('Critical', 0),
+            "high": scanner.results[-1]['summary'].get('High', 0),
+            "medium": scanner.results[-1]['summary'].get('Medium', 0),
+            "low": scanner.results[-1]['summary'].get('Low', 0),
+            "last_scan": scanner.results[-1]['last_scan'],
+            "status": scanner.results[-1]['status']
         }
     }
     return jsonify(stats)
 
 @app.route('/api/trends')
 def get_trends():
+    """Fetch trends data for the past 7 days"""
+    with data_access._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as count FROM phishing_urls WHERE collection_date >= DATE('now', '-7 days')")
+        result = cursor.fetchone()
+        logger.debug(f"Phishing URLs count in the last 7 days: {result['count'] if result else 0}")
+
+        # If no phishing URLs in the last 7 days, try to fetch from OpenPhish
+        if result['count'] == 0:
+            urls, timestamps = fetch_phishing_urls()
+            logger.debug(f"Fetched {len(urls)} URLs from OpenPhish")
+            if urls:
+                # Insert URLs into the database
+                for url in urls:
+                    data_access.insert_to_database('phishing_urls', '(url, collection_date)', (url, timestamps))
+            else:
+                return jsonify({"error": "Failed to fetch phishing URLs"})
+            
+        ph = result['count'] if result else 0
+
     # Generate some random trend data for the past 7 days
     days = [(datetime.datetime.now() - datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
     
     return jsonify({
         "days": days,
         "malware": [random.randint(10, 50) for _ in range(7)],
-        "phishing": [random.randint(20, 70) for _ in range(7)],
+        "phishing": [ph],
         "ddos": [random.randint(5, 30) for _ in range(7)],
         "ransomware": [random.randint(2, 15) for _ in range(7)]
     })
-
-# New routes for vulnerability scanning
-@app.route('/api/vulnerabilities')
-def get_vulnerabilities():
-    global scan_results
-    return jsonify(scan_results)
 
 @app.route('/scan', methods=['GET', 'POST'])
 def scan():
@@ -267,9 +257,6 @@ def scan():
         scan_config_id = request.form.get('scan_config_id')
         scanner_id = request.form.get('scanner_id')
         existing_target_id = request.form.get('existing_target_id')
-        
-        # Create scanner instance
-        scanner = GVMScanner()
         
         # Start the scan
         result = scanner.run_scan(
@@ -296,7 +283,6 @@ def scan():
         # GET request - show form
         # If credentials are in session, fetch available options
         if 'gvm_username' in session and 'gvm_password' in session:
-            scanner = GVMScanner()
             options = scanner.get_scan_options(session['gvm_username'], session['gvm_password'])
             
             if 'error' in options:
@@ -315,10 +301,9 @@ def rescan():
         flash('No scan in progress', 'error')
         return redirect(url_for('scan'))
     
-    scanner = GVMScanner()
     task_id = session['task_id']
-    target_name = scan_results['target']
-    target_hosts = scan_results['target']
+    target_name = session['target']
+    target_hosts = session['target']
 
     scanner.start_scan(task_id, target_name, target_hosts)
     flash('Rescan started successfully!', 'success')
@@ -338,7 +323,6 @@ def get_scan_options():
     session['gvm_username'] = username
     session['gvm_password'] = password
     
-    scanner = GVMScanner()
     options = scanner.get_scan_options(username, password)
     
     return jsonify(options)
@@ -349,7 +333,6 @@ def scan_status():
         flash('No scan in progress', 'error')
         return redirect(url_for('scan'))
         
-    scanner = GVMScanner()
     status = scanner.get_scan_status(task_id=session['task_id'], username=session['gvm_username'], password=session['gvm_password'])
     
     if status['status'] == 'Done':
@@ -364,7 +347,6 @@ def get_scan_results():
         flash('No scan results available', 'error')
         return redirect(url_for('scan'))
     
-    scanner = GVMScanner()
     results = scanner.get_results(username=session['gvm_username'], password=session['gvm_password'])
     
     # Add missing template variables

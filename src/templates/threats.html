@@ -34,6 +34,7 @@ additional_css %}
   </div>
 </div>
 {% endblock %} {% block scripts %}
+<script src="{{ url_for('static', filename='js/threats.js') }}"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     fetch("/api/threats")
