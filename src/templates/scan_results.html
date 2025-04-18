@@ -1,23 +1,211 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Scan Results</title>
-    <link rel="stylesheet" type="text/css" href="css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Scan Results</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/js/jquery.dataTables.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/scan_results.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>Scan Results</h1>
-        <div class="results">
-            <p>Scan ID: {{ scan_id }}</p>
-            <p>Result: <a href="{{ result_url }}">{{ result_url }}</a></p>
-            <p>Scan Date: {{ scan_date }}</p>
-            <p>Scan Time: {{ scan_time }}</p>
-            <p>Scan Duration: {{ scan_duration }}</p>
-            <p>Scan Status: {{ scan_status }}</p>
-            <p>Scan Progress: {{ scan_progress }}%</p>
-            <p>Scan Result: {{ scan_result }}</p>
-        </div>
+  <div class="container">
+    <div class="header">
+      <h1>Security Scan Results</h1>
+      <a href="{{ url_for('scan') }}" class="action-btn">Start New Scan</a>
     </div>
-    <a href="{{ url_for('scan') }}">Start New Scan</a>
+    
+    <div class="scan-meta">
+      <div class="meta-card">
+        <h3>Scan Information</h3>
+        <p><strong>Scan ID:</strong> {{ scan_id }}</p>
+        <p><strong>Date:</strong> {{ scan_date }}</p>
+        <p><strong>Time:</strong> {{ scan_time }}</p>
+        <p><strong>Duration:</strong> {{ scan_duration }}</p>
+      </div>
+      <div class="meta-card">
+        <h3>Scan Status</h3>
+        <p><strong>Status:</strong> {{ scan_status }}</p>
+        <p><strong>Progress:</strong> {{ scan_progress }}%</p>
+        <p><strong>Result:</strong> {{ scan_result }}</p>
+      </div>
+      <div class="meta-card">
+        <h3>Quick Links</h3>
+        <p><strong>Result URL:</strong> <a href="{{ result_url }}">{{ result_url }}</a></p>
+        <p><strong>Total Vulnerabilities:</strong> {{ results.total }}</p>
+      </div>
+    </div>
+    
+    <div class="summary-section">
+      <div class="summary-chart">
+        <h2>Vulnerability Distribution</h2>
+        <canvas id="vulnerabilityChart" width="400" height="300"></canvas>
+      </div>
+      <div class="summary-stats">
+        <div class="stat-card critical">
+          <h3>Critical</h3>
+          <div class="count">{{ results.summary.Critical }}</div>
+          <div>Vulnerabilities</div>
+        </div>
+        <div class="stat-card high">
+          <h3>High</h3>
+          <div class="count">{{ results.summary.High }}</div>
+          <div>Vulnerabilities</div>
+        </div>
+        <div class="stat-card medium">
+          <h3>Medium</h3>
+          <div class="count">{{ results.summary.Medium }}</div>
+          <div>Vulnerabilities</div>
+        </div>
+        <div class="stat-card low">
+          <h3>Low</h3>
+          <div class="count">{{ results.summary.Low }}</div>
+          <div>Vulnerabilities</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="results-table">
+      <h2>Detailed Vulnerabilities</h2>
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Host</th>
+            <th>Port</th>
+            <th>Severity</th>
+            <th>CVSS</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for result in results.results %}
+          <tr data-id="{{ result.id }}">
+            <td>{{ result.name }}</td>
+            <td>{{ result.host }}</td>
+            <td>{{ result.port }}</td>
+            <td><span class="severity-badge severity-{{ result.severity }}">{{ result.severity }}</span></td>
+            <td>
+              {% if result.cvss_base != 'N/A' %}
+                {% set cvss_float = result.cvss_base|float %}
+                {% if cvss_float >= 7.0 %}
+                  <span class="cvss-rating cvss-high">{{ result.cvss_base }}</span>
+                {% elif cvss_float >= 4.0 %}
+                  <span class="cvss-rating cvss-medium">{{ result.cvss_base }}</span>
+                {% else %}
+                  <span class="cvss-rating cvss-low">{{ result.cvss_base }}</span>
+                {% endif %}
+              {% else %}
+                {{ result.cvss_base }}
+              {% endif %}
+            </td>
+            <td>
+              <button class="toggle-details" data-id="{{ result.id }}">Show Details</button>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="6" style="padding: 0;">
+              <div id="details-{{ result.id }}" class="result-detail">
+                <h4>Description</h4>
+                <pre>{{ result.description }}</pre>
+                <div>
+                  <strong>Severity Value:</strong> {{ result.severity_value }}
+                </div>
+                <div>
+                  <strong>Detected:</strong> {{ result.timestamp }}
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <p>Security Scan Results Generated on {{ scan_date }} at {{ scan_time }}</p>
+  </div>
+
+  <div style="display: none;">
+    <span id="critical-count">{{ results.summary.Critical }}</span>
+    <span id="high-count">{{ results.summary.High }}</span>
+    <span id="medium-count">{{ results.summary.Medium }}</span>
+    <span id="low-count">{{ results.summary.Low }}</span>
+  </div>
+  
+  <script>
+    $(document).ready(function() {
+        // Initialize the DataTable
+        $('#resultsTable').DataTable({
+            order: [[3, 'desc']], // Sort by severity by default
+            columnDefs: [
+            { orderable: false, targets: [5] } // Disable sorting on actions column
+            ],
+            pageLength: 25
+        });
+        
+        // Toggle vulnerability details
+        $('.toggle-details').on('click', function() {
+            const id = $(this).data('id');
+            const detailsDiv = $(`#details-${id}`);
+            
+            if (detailsDiv.is(':visible')) {
+            detailsDiv.slideUp();
+            $(this).text('Show Details');
+            } else {
+            detailsDiv.slideDown();
+            $(this).text('Hide Details');
+            }
+        });
+        
+        // Create the chart
+        const ctx = document.getElementById('vulnerabilityChart').getContext('2d');
+
+        // Get data from HTML data attributes to avoid template syntax in JavaScript
+        const criticalCount = parseInt(document.getElementById('critical-count').textContent);
+        const highCount = parseInt(document.getElementById('high-count').textContent);
+        const mediumCount = parseInt(document.getElementById('medium-count').textContent);
+        const lowCount = parseInt(document.getElementById('low-count').textContent);
+        
+        const vulnerabilityChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [{
+                data: [criticalCount, highCount, mediumCount, lowCount],
+                backgroundColor: [
+                    '#d32f2f',
+                    '#f57c00',
+                    '#fbc02d',
+                    '#7cb342'
+                ],
+                borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                    position: 'bottom',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((acc, data) => acc + data, 0);
+                            const percentage = Math.round((value / total) * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+  </script>
 </body>
 </html>

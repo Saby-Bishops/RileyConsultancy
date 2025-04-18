@@ -1,9 +1,10 @@
 import sqlite3
 import json
 import pandas as pd
+import datetime
 
-class OsintData:
-    def __init__(self, db_path='osint.db'):
+class DBManager:
+    def __init__(self, db_path='shopsmart.db'):
         """Initialize with database connection"""
         self.db_path = db_path
         self._ensure_tables_exist()
@@ -19,7 +20,6 @@ class OsintData:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            # Create employees table if not exists
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS employees (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +29,6 @@ class OsintData:
                 )
             """)
             
-            # Create email_results table if not exists
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS email_results (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +39,6 @@ class OsintData:
                 )
             """)
             
-            # Create account_findings table if not exists
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS account_findings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +58,36 @@ class OsintData:
                     id INTEGER PRIMARY KEY,
                     url TEXT NOT NULL,
                     collection_date TEXT NOT NULL
+                )
+                ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS gvm_scan_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    total_vulnerabilities INTEGER NOT NULL,
+                    critical_count INTEGER NOT NULL,
+                    high_count INTEGER NOT NULL,
+                    medium_count INTEGER NOT NULL,
+                    low_count INTEGER NOT NULL
+                )
+                ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS gvm_vulnerabilities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    vuln_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    port TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    severity_value REAL NOT NULL,
+                    description TEXT,
+                    cvss_base TEXT,
+                    timestamp TEXT NOT NULL,
+                    FOREIGN KEY (session_id) REFERENCES gvm_scan_sessions(id)
                 )
                 ''')
     
@@ -232,6 +260,39 @@ class OsintData:
         
         return finding_id
     
+    def save_gvm_results(self, task_id, gvm_results):
+        """Save GVM results for an employee"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            table_name = 'gvm_scan_sessions'
+            columns = '(task_id, timestamp, total_vulnerabilities, critical_count, high_count, medium_count, low_count)'
+            data = (task_id, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), gvm_results.get('total', 0),
+                                                                        gvm_results.get('summary', {}).get('Critical', 0),
+                                                                        gvm_results.get('summary', {}).get('High', 0),
+                                                                        gvm_results.get('summary', {}).get('Medium', 0),
+                                                                        gvm_results.get('summary', {}).get('Low', 0))
+            
+            session_id = self.insert_to_database(table_name, columns, data)
+            
+            # Insert each vulnerability
+            for vuln in gvm_results.get('results', []):
+                table_name = 'gvm_vulnerabilities'
+                columns = '(session_id, vuln_id, name, host, port, severity, severity_value, description, cvss_base, timestamp)'
+                data = (session_id,
+                        vuln.get('id', ''),
+                        vuln.get('name', 'Unknown'),
+                        vuln.get('host', 'Unknown'),
+                        vuln.get('port', 'Unknown'),
+                        vuln.get('severity', 'Low'),
+                        vuln.get('severity_value', 0.0),
+                        vuln.get('description', 'No description available'),
+                        vuln.get('cvss_base', 'N/A'),
+                        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                
+                self.insert_to_database(table_name, columns, data)
+            
+        return True
+    
     def insert_to_database(self, table_name, columns, data):
         """Insert data into the specified table"""
         with self._get_connection() as conn:
@@ -241,6 +302,8 @@ class OsintData:
                 INSERT INTO {table_name} {columns}
                 VALUES ({', '.join(['?' for _ in data])})
             """, data)
+
+            return cursor.lastrowid
 
     def show_phishing_urls(self):
         """Fetch and display phishing URLs from the database"""
@@ -253,3 +316,63 @@ class OsintData:
             phishing_urls = [dict(row) for row in rows]
         
         return phishing_urls
+    
+    def get_gvm_results(self, task_id):
+        """Retrieve GVM results for a specific task"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # First, get the scan session information
+            cursor.execute('''
+            SELECT id, timestamp, total_vulnerabilities, 
+                critical_count, high_count, medium_count, low_count
+            FROM gvm_scan_sessions
+            WHERE id = ?
+            ''', (task_id,))
+            
+            session_data = cursor.fetchone()
+            if not session_data:
+                return None
+                
+            session_id, timestamp, total, critical, high, medium, low = session_data
+            
+            # Then get all vulnerabilities for this session
+            cursor.execute('''
+            SELECT vuln_id, name, host, port, severity, 
+                severity_value, description, cvss_base, timestamp
+            FROM gvm_vulnerabilities
+            WHERE session_id = ?
+            ''', (session_id,))
+            
+            vuln_rows = cursor.fetchall()
+            
+            # Format results to match the structure from get_results
+            results = []
+            for row in vuln_rows:
+                vuln_id, name, host, port, severity, severity_value, description, cvss_base, timestamp = row
+                results.append({
+                    'id': vuln_id,
+                    'name': name,
+                    'host': host,
+                    'port': port,
+                    'severity': severity,
+                    'severity_value': severity_value,
+                    'description': description,
+                    'cvss_base': cvss_base,
+                    'timestamp': timestamp
+                })
+            
+            # Create summary dictionary
+            summary = {
+                'Critical': critical,
+                'High': high,
+                'Medium': medium,
+                'Low': low
+            }
+            
+            # Return in the same format as get_results
+            return {
+                'results': results,
+                'summary': summary,
+                'total': total
+            }

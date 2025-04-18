@@ -8,9 +8,11 @@ from werkzeug.utils import secure_filename
 
 from api.osint.email_search import EmailSearch
 from api.osint.username_search import UsernameSearch
-from api.osint.osint_data import OsintData
-from api.gvm_integration import GVMScanner
 from api.osint.open_phish import fetch_phishing_urls, extract_domains
+
+from api.recon.gvm_scanner import GVMScanner
+
+from db_manager import DBManager
 
 print("Content-type: text/html\n")
 print("Hello, Python is working with XAMPP!")
@@ -19,8 +21,8 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'csv'}
 app.secret_key = os.urandom(24)  # For flash messages
-db_path = os.path.join(os.path.dirname(__file__), os.pardir, 'db', 'osint.db')
-data_access = OsintData(db_path)
+db_path = os.path.join(os.path.dirname(__file__), os.pardir, 'db', 'shopsmart.db')
+data_access = DBManager(db_path)
 data_access._ensure_tables_exist()
 
 scanner = GVMScanner()
@@ -91,6 +93,33 @@ def export_threats():
     """Export threats data as JSON"""
     filename = data_access.export_threats_json()
     return send_file(filename, as_attachment=True)
+
+@app.route('/api/vulnerabilities')
+def get_vulnerabilities():
+    """Fetch vulnerabilities data"""
+    if len(scanner.results) == 0:
+        # No scan results available
+        return jsonify({"error": "No scan results available"})
+    # Combine regular threat stats with vulnerability stats
+    stats = {
+        "total_threats": random.randint(150, 300),
+        "critical": random.randint(5, 20),
+        "high": random.randint(20, 50),
+        "medium": random.randint(50, 100),
+        "low": random.randint(80, 150),
+        "blocked": random.randint(120, 250),
+        "investigating": random.randint(10, 30),
+        "vulnerabilities": {
+            "total":scanner.results[-1]['total'],
+            "critical": scanner.results[-1]['summary'].get('Critical', 0),
+            "high": scanner.results[-1]['summary'].get('High', 0),
+            "medium": scanner.results[-1]['summary'].get('Medium', 0),
+            "low": scanner.results[-1]['summary'].get('Low', 0),
+            "last_scan": scanner.results[-1]['last_scan'],
+            "status": scanner.results[-1]['status']
+        }
+    }
+    return jsonify(stats)
 
 @app.route('/vulnerabilities')
 def vulnerabilities():
@@ -257,6 +286,7 @@ def scan():
         scan_config_id = request.form.get('scan_config_id')
         scanner_id = request.form.get('scanner_id')
         existing_target_id = request.form.get('existing_target_id')
+        session['scan_start_time'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Start the scan
         result = scanner.run_scan(
@@ -347,19 +377,51 @@ def get_scan_results():
         flash('No scan results available', 'error')
         return redirect(url_for('scan'))
     
-    results = scanner.get_results(username=session['gvm_username'], password=session['gvm_password'])
+    task_id = session.get('task_id')
+    
+    # First, check if results for this task already exist in the database
+    existing_results = data_access.get_gvm_results(task_id)
+    
+    # If results don't exist in the database, get them from the scanner and save them
+    if not existing_results:
+        # Get results from the scanner
+        results = scanner.get_results(
+            username=session.get('gvm_username'), 
+            password=session.get('gvm_password')
+        )
+        
+        if not results or 'error' in results:
+            flash('Error retrieving scan results: ' + results.get('error', 'Unknown error'), 'error')
+            return redirect(url_for('scan'))
+        
+        # Save the results to the database with the task_id as identifier
+        success = data_access.save_gvm_results(task_id, results)
+        if not success:
+            flash('Error saving scan results', 'error')
+            return redirect(url_for('scan'))
+    else:
+        # Use existing results from the database
+        results = existing_results
+    
+    # Calculate scan duration if start time is available
+    scan_duration = "N/A"
+    if 'scan_start_time' in session:
+        start_time = datetime.datetime.strptime(session['scan_start_time'], "%Y-%m-%d %H:%M:%S")
+        end_time = datetime.datetime.now()
+        duration = end_time - start_time
+        scan_duration = str(duration).split('.')[0]  # Remove microseconds
     
     # Add missing template variables
-    return render_template('scan_results.html', 
-                          results=results,
-                          scan_id=session.get('task_id', 'N/A'),
-                          result_url=url_for('get_scan_results', _external=True),
-                          scan_date=datetime.datetime.now().strftime("%Y-%m-%d"),
-                          scan_time=datetime.datetime.now().strftime("%H:%M:%S"),
-                          scan_duration="N/A",  # You might want to calculate this
-                          scan_status="Complete",
-                          scan_progress=100,
-                          scan_result="Complete")
+    return render_template('scan_results.html',
+        results=results,
+        scan_id=task_id,
+        result_url=url_for('get_scan_results', _external=True),
+        scan_date=datetime.datetime.now().strftime("%Y-%m-%d"),
+        scan_time=datetime.datetime.now().strftime("%H:%M:%S"),
+        scan_duration=scan_duration,
+        scan_status="Complete",
+        scan_progress=100,
+        scan_result="Complete")
 
 
 @app.route('/test')
