@@ -1,0 +1,322 @@
+{% extends "layout.html" %}
+{% block title %}Network Alerts{% endblock %}
+{% block additional_css %}{% endblock %}
+<body>
+    <div class="container">
+        <main class="content">
+            <header class="content-header">
+                <div class="header-title">
+                    <h1><i class="fas fa-exclamation-triangle"></i> Network Alerts</h1>
+                    <p>Real-time monitoring of network intrusions and suspicious activities</p>
+                </div>
+                <div class="header-actions">
+                    {% for action in user_actions %}
+                        {% if action.get('method') == 'post' %}
+                            <form action="{{ action.url }}" method="post" class="inline-form">
+                                <button type="submit" class="action-btn {{ action.class }}">
+                                    <i class="fas {{ action.icon }}"></i> {{ action.text }}
+                                </button>
+                            </form>
+                        {% else %}
+                            <a href="{{ action.url }}" class="action-btn {{ action.class }}">
+                                <i class="fas {{ action.icon }}"></i> {{ action.text }}
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </header>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="dashboard-stats">
+                <div class="stats-card">
+                    <div class="stats-icon critical">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div class="stats-info">
+                        <h3>Critical Alerts</h3>
+                        <p class="stats-count" id="critical-count">0</p>
+                    </div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-icon high">
+                        <i class="fas fa-radiation"></i>
+                    </div>
+                    <div class="stats-info">
+                        <h3>High Severity</h3>
+                        <p class="stats-count" id="high-count">0</p>
+                    </div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-icon medium">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stats-info">
+                        <h3>Medium Severity</h3>
+                        <p class="stats-count" id="medium-count">0</p>
+                    </div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-icon low">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <div class="stats-info">
+                        <h3>Low Severity</h3>
+                        <p class="stats-count" id="low-count">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-section">
+                <div class="section-header">
+                    <h2>Recent Alerts</h2>
+                    <div class="section-filters">
+                        <div class="search-box">
+                            <input type="text" id="alert-search" placeholder="Search alerts...">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="filter-dropdown">
+                            <select id="severity-filter">
+                                <option value="all">All Severities</option>
+                                <option value="Critical">Critical</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="alerts-table" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Source IP</th>
+                                <th>Destination IP</th>
+                                <th>Ports</th>
+                                <th>Threat Type</th>
+                                <th>Severity</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-data">
+                            <!-- Alert data will be loaded here -->
+                            <tr>
+                                <td colspan="7" class="text-center">Loading alerts data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div id="no-alerts" class="empty-state" style="display: none;">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>No Alerts Found</h3>
+                    <p>Network monitoring is active but no suspicious activity has been detected.</p>
+                </div>
+            </div>
+
+            <div class="content-section">
+                <div class="section-header">
+                    <h2>Alert Details</h2>
+                </div>
+                <div id="alert-details" class="alert-details">
+                    <div class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <h3>No Alert Selected</h3>
+                        <p>Select an alert from the table above to view detailed information.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Function to load alerts
+            function loadAlerts() {
+                $.getJSON('/api/alerts', function(data) {
+                    updateAlertTable(data);
+                    updateAlertCounts(data);
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error("Error fetching alerts:", errorThrown);
+                    $('#alerts-data').html('<tr><td colspan="7" class="text-center">Error loading alerts data.</td></tr>');
+                });
+            }
+
+            // Update alert table with data
+            function updateAlertTable(alerts) {
+                if (alerts.length === 0) {
+                    $('#alerts-data').html('<tr><td colspan="7" class="text-center">No alerts found.</td></tr>');
+                    $('#no-alerts').show();
+                    return;
+                }
+                
+                $('#no-alerts').hide();
+                let tableHtml = '';
+                
+                alerts.forEach(function(alert) {
+                    const severityClass = alert.severity.toLowerCase();
+                    tableHtml += `
+                        <tr data-id="${alert.id}" class="severity-${severityClass}">
+                            <td>${formatTimestamp(alert.timestamp)}</td>
+                            <td>${alert.source_ip}</td>
+                            <td>${alert.destination_ip}</td>
+                            <td>${alert.source_port} → ${alert.destination_port}</td>
+                            <td>${alert.threat_type}</td>
+                            <td><span class="severity-badge ${severityClass}">${alert.severity}</span></td>
+                            <td>
+                                <button class="btn-icon view-details" data-id="${alert.id}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn-icon investigate" data-id="${alert.id}">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                $('#alerts-data').html(tableHtml);
+                
+                // Add click event to view details
+                $('.view-details').click(function() {
+                    const alertId = $(this).data('id');
+                    showAlertDetails(alertId, alerts);
+                });
+            }
+
+            // Format timestamp
+            function formatTimestamp(timestamp) {
+                const date = new Date(timestamp);
+                return date.toLocaleString();
+            }
+
+            // Show alert details
+            function showAlertDetails(alertId, alerts) {
+                const alert = alerts.find(a => a.id === alertId);
+                if (!alert) return;
+                
+                const severityClass = alert.severity.toLowerCase();
+                let detailsHtml = `
+                    <div class="alert-header ${severityClass}">
+                        <h3>${alert.threat_type}</h3>
+                        <span class="severity-badge ${severityClass}">${alert.severity}</span>
+                    </div>
+                    <div class="alert-body">
+                        <div class="alert-section">
+                            <h4>Traffic Information</h4>
+                            <div class="alert-detail-row">
+                                <span class="detail-label">Source:</span>
+                                <span class="detail-value">${alert.source_ip}:${alert.source_port}</span>
+                            </div>
+                            <div class="alert-detail-row">
+                                <span class="detail-label">Destination:</span>
+                                <span class="detail-value">${alert.destination_ip}:${alert.destination_port}</span>
+                            </div>
+                            <div class="alert-detail-row">
+                                <span class="detail-label">Protocol:</span>
+                                <span class="detail-value">${getProtocolName(alert.protocol)}</span>
+                            </div>
+                            <div class="alert-detail-row">
+                                <span class="detail-label">Detected:</span>
+                                <span class="detail-value">${formatTimestamp(alert.timestamp)}</span>
+                            </div>
+                        </div>
+                        <div class="alert-section">
+                            <h4>Description</h4>
+                            <p>${alert.description}</p>
+                        </div>
+                        <div class="alert-actions">
+                            <button class="btn btn-primary investigate-alert" data-id="${alert.id}">
+                                <i class="fas fa-search"></i> Investigate
+                            </button>
+                            <button class="btn btn-danger block-ip" data-ip="${alert.source_ip}">
+                                <i class="fas fa-ban"></i> Block Source IP
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                $('#alert-details').html(detailsHtml);
+            }
+
+            // Get protocol name from number
+            function getProtocolName(protocol) {
+                const protocols = {
+                    1: 'ICMP',
+                    6: 'TCP',
+                    17: 'UDP',
+                    // Add more protocols as needed
+                };
+                return protocols[protocol] || `Unknown (${protocol})`;
+            }
+
+            // Update alert counts
+            function updateAlertCounts(alerts) {
+                let counts = {
+                    'Critical': 0,
+                    'High': 0,
+                    'Medium': 0,
+                    'Low': 0
+                };
+                
+                alerts.forEach(function(alert) {
+                    if (counts[alert.severity] !== undefined) {
+                        counts[alert.severity]++;
+                    }
+                });
+                
+                $('#critical-count').text(counts['Critical']);
+                $('#high-count').text(counts['High']);
+                $('#medium-count').text(counts['Medium']);
+                $('#low-count').text(counts['Low']);
+            }
+
+            // Initialize - load alerts on page load
+            loadAlerts();
+            
+            // Refresh alerts every 30 seconds
+            setInterval(loadAlerts, 30000);
+            
+            // Search functionality
+            $('#alert-search').on('input', function() {
+                const searchValue = $(this).val().toLowerCase();
+                $('#alerts-table tbody tr').each(function() {
+                    const rowText = $(this).text().toLowerCase();
+                    $(this).toggle(rowText.includes(searchValue));
+                });
+            });
+            
+            // Severity filter
+            $('#severity-filter').change(function() {
+                const selectedSeverity = $(this).val();
+                if (selectedSeverity === 'all') {
+                    $('#alerts-table tbody tr').show();
+                } else {
+                    $('#alerts-table tbody tr').hide();
+                    $(`#alerts-table tbody tr.severity-${selectedSeverity.toLowerCase()}`).show();
+                }
+            });
+            
+            // Update last updated time
+            function updateLastUpdated() {
+                const now = new Date();
+                $('#last-updated').text(now.toLocaleString());
+            }
+            
+            updateLastUpdated();
+            setInterval(updateLastUpdated, 60000);
+        });
+    </script>
+</body>
+</html>

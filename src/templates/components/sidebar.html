@@ -6,7 +6,7 @@
         <ul>
             <li {% if request.path == '/' %}class="active"{% endif %}><a href="/"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
             <li {% if '/vulnerabilities' in request.path %}class="active"{% endif %}><a href="/vulnerabilities"><i class="fas fa-bug"></i> Vulnerabilities</a></li>
-            <li><a href="#"><i class="fas fa-exclamation-triangle"></i> Alerts</a></li>
+            <li {% if '/alerts' in request.path %}class="active"{% endif %}><a href="/alerts"><i class="fas fa-exclamation-triangle"></i> Alerts</a></li>
             <li><a href="/threats"><i class="fas fa-globe"></i> Threats</a></li>
             <li><a href="#"><i class="fas fa-chart-line"></i> Analytics</a></li>
             <li><a href="#"><i class="fas fa-cog"></i> Settings</a></li>

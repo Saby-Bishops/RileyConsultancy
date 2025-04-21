@@ -90,6 +90,21 @@ class DBManager:
                     FOREIGN KEY (session_id) REFERENCES gvm_scan_sessions(id)
                 )
                 ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS nids_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_ip TEXT,
+                    destination_ip TEXT,
+                    source_port INTEGER,
+                    destination_port INTEGER,
+                    protocol INTEGER,
+                    threat_type TEXT,
+                    severity TEXT,
+                    description TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
     
     def import_employees_from_csv(self, csv_file_path):
         """Import employees from a CSV file and return stats"""
@@ -291,6 +306,28 @@ class DBManager:
                 
                 self.insert_to_database(table_name, columns, data)
             
+        return True
+    
+    def save_alert(self, alert_data):
+        """Save an alert to the database"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            table_name = 'nids_alerts'
+            columns = '(source_ip, destination_ip, source_port, destination_port, protocol, threat_type, severity, description, timestamp)'
+            data = (
+                alert_data.get('source_ip'),
+                alert_data.get('destination_ip'),
+                alert_data.get('source_port'),
+                alert_data.get('destination_port'),
+                alert_data.get('protocol'),
+                alert_data.get('threat_type'),
+                alert_data.get('severity'),
+                alert_data.get('description'),
+                alert_data.get('timestamp', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            
+            self.insert_to_database(table_name, columns, data)
+        
         return True
     
     def insert_to_database(self, table_name, columns, data):

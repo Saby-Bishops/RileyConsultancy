@@ -1,16 +1,20 @@
 # app.py
-from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, session, send_file
+from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, session, send_file, Response
+import json
 import datetime
 import random
 import os
 import logging
 from werkzeug.utils import secure_filename
+import threading
 
 from api.osint.email_search import EmailSearch
 from api.osint.username_search import UsernameSearch
 from api.osint.open_phish import fetch_phishing_urls, extract_domains
 
 from api.recon.gvm_scanner import GVMScanner
+
+from api.realtime.nids import IntrusionDetectionSystem
 
 from db_manager import DBManager
 
@@ -26,6 +30,8 @@ data_access = DBManager(db_path)
 data_access._ensure_tables_exist()
 
 scanner = GVMScanner()
+nids = IntrusionDetectionSystem()
+nids.db_manager = data_access  # Set the DBManager instance for NIDS
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,6 +69,16 @@ def run_scan_thread(username, password, target_name, target_hosts):
         scanner.results.append(scan_results)
     except Exception as e:
         scan_results['status'] = f"Error: {str(e)}"
+
+# Start NIDS in a background thread
+def start_nids_thread():
+    logger.info("Starting Network Intrusion Detection System in background thread...")
+    try:
+        alert = nids.start()
+        if alert:
+            data_access.save_alert(alert)
+    except Exception as e:
+        logger.error(f"Error starting NIDS: {str(e)}")
 
 @app.route('/')
 def index():
@@ -423,10 +439,124 @@ def get_scan_results():
         scan_progress=100,
         scan_result="Complete")
 
+@app.route('/alerts')
+def alerts():
+    user_actions = [
+        {'url': '/api/export/alerts', 'icon': 'fa-download', 'text': 'Export', 'class': 'export-btn'},
+        {'url': '/alerts/clear', 'icon': 'fa-trash', 'text': 'Clear', 'class': 'clear-btn', 'method': 'post'}
+    ]
+    return render_template('alerts.html', user_actions=user_actions)
+
+@app.route('/alerts/clear', methods=['POST'])
+def clear_alerts():
+    try:
+        with data_access._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM nids_alerts")
+            conn.commit()
+        flash('All alerts have been cleared', 'success')
+    except Exception as e:
+        flash(f'Error clearing alerts: {str(e)}', 'error')
+    
+    return redirect(url_for('alerts'))
+
+@app.route('/api/alerts')
+def get_alerts():
+    """Fetch alerts data from database"""
+    try:
+        with data_access._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, source_ip, destination_ip, source_port, destination_port, 
+                protocol, threat_type, severity, description, timestamp 
+                FROM nids_alerts 
+                ORDER BY timestamp DESC
+            """)
+            alerts = cursor.fetchall()
+        
+        # Convert datetime objects to string for JSON serialization
+        for alert in alerts:
+            if isinstance(alert['timestamp'], datetime.datetime):
+                alert['timestamp'] = alert['timestamp'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        return jsonify(alerts)
+    except Exception as e:
+        logger.error(f"Error fetching alerts: {str(e)}")
+        return jsonify({"error": str(e)})
+
+@app.route('/api/export/alerts')
+def export_alerts():
+    # Get database manager
+    db_manager = DBManager()
+    
+    # Get alerts from database
+    with db_manager._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM nids_alerts")
+        alerts = [dict(row) for row in cursor.fetchall()]
+    
+    # Convert to JSON
+    json_data = json.dumps(alerts)
+    
+    # Create response with correct headers
+    response = Response(
+        json_data,
+        mimetype='application/json',
+        headers={
+            'Content-Disposition': 'attachment; filename=alerts_export.json'
+        }
+    )
+    
+    return response
+
+@app.route('/api/alerts/summary')
+def get_alerts_summary():
+    """Get a summary of recent alerts for dashboard"""
+    try:
+        with data_access._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get total count
+            cursor.execute("SELECT COUNT(*) as total FROM nids_alerts")
+            total = cursor.fetchone()['total']
+            
+            # Get counts by severity
+            cursor.execute("""
+                SELECT severity, COUNT(*) as count 
+                FROM nids_alerts 
+                GROUP BY severity
+            """)
+            severity_counts = {row['severity']: row['count'] for row in cursor.fetchall()}
+            
+            # Get recent alerts (last 24 hours)
+            cursor.execute("""
+                SELECT COUNT(*) as recent 
+                FROM nids_alerts 
+                WHERE timestamp >= datetime('now', '-1 day')
+            """)
+            recent = cursor.fetchone()['recent']
+            
+        return jsonify({
+            'total': total,
+            'recent': recent,
+            'critical': severity_counts.get('Critical', 0),
+            'high': severity_counts.get('High', 0),
+            'medium': severity_counts.get('Medium', 0),
+            'low': severity_counts.get('Low', 0)
+        })
+    except Exception as e:
+        logger.error(f"Error fetching alerts summary: {str(e)}")
+        return jsonify({"error": str(e)})
+
 
 @app.route('/test')
 def test():
     return render_template('test.html')
 
 if __name__ == '__main__':
+    # Start the NIDS in a background thread 
+    nids_thread = threading.Thread(target=start_nids_thread)
+    nids_thread.daemon = True  # Daemonize thread
+    nids_thread.start()
+
     app.run(debug=True)
