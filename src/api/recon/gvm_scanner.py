@@ -4,7 +4,7 @@ from gvm.protocols.latest import Gmp
 from gvm.transforms import EtreeTransform
 import datetime
 import logging
-import subprocess
+import dbus
 import os
 
 # Configure logging
@@ -17,25 +17,28 @@ class GVMScanner:
         self.results = []
 
     def start_gvm_service(self):
-        """Try to start the GVM service if it's not running"""
+        """Try to start the GVM service using D-Bus/systemd API"""
         try:
-            logger.info("Attempting to start GVM service...")
-            # Using systemctl to start the service
-            result = subprocess.run(
-                ['sudo', 'systemctl', 'start', 'gvmd'],
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            import dbus
+            logger.info("Attempting to start GVM service via D-Bus...")
             
-            if result.returncode == 0:
-                logger.info("GVM service started successfully")
-                return True
-            else:
-                logger.error(f"Failed to start GVM service: {result.stderr}")
-                return False
+            # Connect to the system bus
+            system_bus = dbus.SystemBus()
+            
+            # Get the systemd service
+            systemd = system_bus.get_object('org.freedesktop.systemd1', 
+                                            '/org/freedesktop/systemd1')
+            
+            # Get the manager interface
+            manager = dbus.Interface(systemd, 'org.freedesktop.systemd1.Manager')
+            
+            # Start the unit
+            job = manager.StartUnit('gvmd.service', 'replace')
+            
+            logger.info("GVM service start job initiated")
+            return True
         except Exception as e:
-            logger.error(f"Error while starting GVM service: {e}")
+            logger.error(f"Error while starting GVM service via D-Bus: {e}")
             return False
         
     def check_socket_exists(self):

@@ -8,7 +8,7 @@
         <h2>GVM Authentication</h2>
         <p>Please enter your GVM credentials to access vulnerability scanning features.</p>
         
-        <form method="post" action="{{ url_for('gvm_login', next=next) }}">
+        <form method="post" action="{{ url_for('scanning.gvm_login', next=next) }}">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required>
@@ -21,7 +21,7 @@
             
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Login</button>
-                <a href="{{ url_for('gvm_login') }}" class="btn btn-secondary">Cancel</a>
+                <a href="{{ url_for('scanning.gvm_login') }}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
