@@ -15,14 +15,18 @@ class IntrusionDetectionSystem:
             llm_endpoint="https://cbf6-2605-a601-af2e-da00-124d-6617-5893-a3ef.ngrok-free.app"
         )
 
-    def start(self):
-        interface = choose_interface()
+    def start(self, interface=None):
+        """Start the IDS and begin capturing packets."""
         if interface:
             print(f"Starting IDS on interface {interface}")
             self.packet_capture.start_capture(interface)
         else:
-            print("No valid interface selected. Exiting.")
-            return
+            interface = choose_interface()
+            if not interface:
+                print("No interface selected. Exiting.")
+                return
+            print(f"Starting IDS on interface {interface}")
+            self.packet_capture.start_capture(interface)
         
         while True:
             try:
