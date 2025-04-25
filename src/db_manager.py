@@ -19,7 +19,6 @@ class DBManager:
     def _get_connection(self):
         """Get a database connection with row factory"""
         conn = mysql.connector.connect(**self.conn_settings)
-        conn.row_factory = sqlite3.Row
         return conn
 
     def _ensure_tables_exist(self):
