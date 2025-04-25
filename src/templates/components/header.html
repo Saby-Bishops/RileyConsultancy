@@ -4,6 +4,20 @@
         <input type="text" placeholder="Search...">
         <button><i class="fas fa-search"></i></button>
     </div>
+    <div class="header-right">
+        <div class="user-menu">
+            {% if session.user_id %}
+                <span class="username">{{ session.username }}</span>
+                <a href="{{ url_for('logout') }}" class="logout-link">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="login-link">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </a>
+            {% endif %}
+        </div>
+    </div>
     <div class="user-actions">
         {% if user_actions %}
             {% for action in user_actions %}

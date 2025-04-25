@@ -4,13 +4,15 @@ from routes.vulnerabilities import vulnerabilities_bp
 from routes.alerts import alerts_bp
 from routes.scanning import scan_bp
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, current_app
+from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, current_app, session
 import datetime
 import random
 import os
 import logging
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 import threading
+from functools import wraps
 
 from api.osint.email_search import EmailSearch
 from api.osint.username_search import UsernameSearch
@@ -48,6 +50,50 @@ app.register_blueprint(scan_bp)
 # Create required directories
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Add this decorator function to protect routes
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Add these routes for user authentication
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login route"""
+    next_url = request.args.get('next', url_for('index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '')
+        password = request.form.get('password', '')
+        
+        # Verify credentials with database
+        user = app.db_manager.get_user_by_username(username)
+        
+        if user and check_password_hash(user['password_hash'], password):
+            # Store user info in session
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            
+            flash('Successfully logged in', 'success')
+            # Redirect to the originally requested page
+            return redirect(next_url)
+        else:
+            flash('Invalid username or password', 'error')
+    
+    # GET request - show login form
+    return render_template('login.html', next=next_url)
+
+@app.route('/logout')
+def logout():
+    """User logout route"""
+    session.clear()
+    flash('You have been logged out', 'success')
+    return redirect(url_for('login'))
+
 # Run scan in background thread
 def run_scan_thread(username, password, target_name, target_hosts):
     scan_results = {
@@ -82,6 +128,7 @@ def run_scan_thread(username, password, target_name, target_hosts):
         scan_results['status'] = f"Error: {str(e)}"
 
 @app.route('/')
+@login_required
 def index():
     user_actions = [{'url': '/refresh', 'icon': 'fa-search', 'text': 'Refresh', 'class': 'refresh-btn'}]
     return render_template('dashboard.html', user_actions=user_actions)

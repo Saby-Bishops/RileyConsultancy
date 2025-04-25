@@ -2,6 +2,7 @@ import sqlite3
 import json
 import pandas as pd
 import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 class DBManager:
     def __init__(self, db_path='shopsmart.db'):
@@ -105,6 +106,18 @@ class DBManager:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    email TEXT UNIQUE,
+                    role TEXT DEFAULT 'user',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
+                )
+            ''')
     
     def import_employees_from_csv(self, csv_file_path):
         """Import employees from a CSV file and return stats"""
@@ -413,3 +426,45 @@ class DBManager:
                 'summary': summary,
                 'total': total
             }
+        
+    def get_user_by_username(self, username):
+        """Get user data by username"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+            user = cursor.fetchone()
+            return user
+            
+    def get_user_by_id(self, user_id):
+        """Get user data by ID"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+            user = cursor.fetchone()
+            return user
+
+    def create_user(self, username, password, email=None, role='user'):
+        """Create new user with hashed password"""
+        password_hash = generate_password_hash(password)
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    'INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)',
+                    (username, password_hash, email, role)
+                )
+                conn.commit()
+                return {"success": True, "user_id": cursor.lastrowid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+    def update_last_login(self, user_id):
+        """Update user's last login timestamp"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+                (user_id,)
+            )
+            conn.commit()
