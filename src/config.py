@@ -18,3 +18,5 @@ class Config:
 
     INTERFACE_NAME = "eth0"
     NIDS_INTERFACE = os.environ.get('NIDS_INTERFACE', INTERFACE_NAME)
+
+    DEFAULT_SCANNER = os.environ.get('DEFAULT_SCANNER', 'gvm')  # Default scanner type

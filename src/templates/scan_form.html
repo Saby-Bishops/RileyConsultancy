@@ -9,102 +9,149 @@
 </div>
 {% endblock %}
 {% block content %}
-<div class="scan-form-container">
-    <form method="post" action="{{ url_for('scan') }}" id="scan-form">
-        <div class="form-section">
-            <h3>Target Configuration</h3>
-            <div class="form-group">
-                <label for="target_type">Target Type</label>
-                <select id="target_type" name="target_type" class="form-control">
-                    <option value="new">New Target</option>
-                    <option value="existing">Existing Target</option>
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold mb-6">Security Vulnerability Scan</h1>
+    
+    <!-- Scanner Type Selection -->
+    <div class="mb-6 p-4 bg-gray-100 rounded-lg">
+        <h2 class="text-lg font-semibold mb-2">Current Scanner: {{ scanner_type | upper }}</h2>
+        <a href="{{ url_for('scanning.change_scanner') }}" class="text-blue-500 hover:underline">
+            Change Scanner
+        </a>
+    </div>
+    
+    {% if not scan_options %}
+    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6">
+        <p>You need to provide credentials to access the scanner.</p>
+        <form action="{{ url_for('scanning.get_scan_options') }}" method="post" id="credentialsForm">
+            <input type="hidden" name="scanner_type" value="{{ scanner_type }}">
+            <div class="mt-3">
+                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" name="username" id="username" class="mt-1 p-2 border rounded w-full">
+            </div>
+            <div class="mt-3">
+                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" name="password" id="password" class="mt-1 p-2 border rounded w-full">
+            </div>
+            <div class="mt-4">
+                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Connect to Scanner
+                </button>
+            </div>
+        </form>
+    </div>
+    {% else %}
+    <form action="{{ url_for('scanning.scan') }}" method="post" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <!-- Target Information -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-4">Target Information</h2>
+            
+            {% if scan_options.targets and scan_options.targets|length > 0 %}
+            <div class="mb-4">
+                <label for="existing_target_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    Use Existing Target (Optional)
+                </label>
+                <select name="existing_target_id" id="existing_target_id" class="w-full p-2 border rounded">
+                    <option value="">-- Create New Target --</option>
+                    {% for target in scan_options.targets %}
+                    <option value="{{ target.id }}">{{ target.name }} ({{ target.hosts }})</option>
+                    {% endfor %}
                 </select>
             </div>
+            {% endif %}
             
-            <!-- New Target Options -->
-            <div id="new-target-options">
-                <div class="form-group">
-                    <label for="target_name">Target Name</label>
-                    <input type="text" id="target_name" name="target_name" class="form-control" placeholder="e.g., Web Server Scan">
-                </div>
-                <div class="form-group">
-                    <label for="target_hosts">Target Hosts</label>
-                    <textarea id="target_hosts" name="target_hosts" class="form-control" placeholder="IP addresses, hostnames, or CIDR notation (one per line)"></textarea>
-                    <small class="form-text text-muted">Examples: 192.168.1.1, example.com, 10.0.0.0/24</small>
-                </div>
+            <div class="mb-4">
+                <label for="target_name" class="block text-sm font-medium text-gray-700 mb-2">
+                    Target Name
+                </label>
+                <input type="text" name="target_name" id="target_name" placeholder="My Target" 
+                       class="w-full p-2 border rounded" required>
             </div>
             
-            <!-- Existing Target Options -->
-            <div id="existing-target-options" style="display: none;">
-                <div class="form-group">
-                    <label for="existing_target_id">Select Target</label>
-                    <select id="existing_target_id" name="existing_target_id" class="form-control">
-                        {% if scan_options and scan_options.targets %}
-                            {% for target in scan_options.targets %}
-                                <option value="{{ target.id }}">{{ target.name }}</option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="">No targets available</option>
-                        {% endif %}
-                    </select>
-                </div>
+            <div class="mb-4">
+                <label for="target_hosts" class="block text-sm font-medium text-gray-700 mb-2">
+                    Target Hosts
+                </label>
+                <textarea name="target_hosts" id="target_hosts" 
+                          placeholder="Enter IP addresses, hostnames, or CIDR notation (e.g., 192.168.1.1, example.com, 10.0.0.0/24)"
+                          class="w-full p-2 border rounded" rows="3" required></textarea>
+                <p class="text-sm text-gray-500 mt-1">
+                    Enter multiple targets separated by commas
+                </p>
+            </div>
+            
+            <div class="mb-4">
+                <label for="target_ports" class="block text-sm font-medium text-gray-700 mb-2">
+                    Target Ports (Optional)
+                </label>
+                <input type="text" name="target_ports" id="target_ports" 
+                       placeholder="22,80,443,8080 or leave empty for default ports"
+                       class="w-full p-2 border rounded">
+                <p class="text-sm text-gray-500 mt-1">
+                    Enter ports separated by commas, or ranges like 1-1000
+                </p>
             </div>
         </div>
         
-        <div class="form-section">
-            <h3>Scan Configuration</h3>
-            <div class="form-group">
-                <label for="scan_config_id">Scan Config</label>
-                <select id="scan_config_id" name="scan_config_id" class="form-control" required>
-                    {% if scan_options and scan_options.configs %}
-                        {% for config in scan_options.configs %}
-                            <option value="{{ config.id }}">{{ config.name }}</option>
-                        {% endfor %}
-                    {% else %}
-                        <option value="">No scan configs available</option>
-                    {% endif %}
+        <!-- Scan Configuration -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-4">Scan Configuration</h2>
+            
+            <div class="mb-4">
+                <label for="scan_config_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    Scan Config
+                </label>
+                <select name="scan_config_id" id="scan_config_id" class="w-full p-2 border rounded" required>
+                    {% for config in scan_options.scan_configs %}
+                    <option value="{{ config.id }}">{{ config.name }}</option>
+                    {% endfor %}
                 </select>
             </div>
             
-            <div class="form-group">
-                <label for="scanner_id">Scanner</label>
-                <select id="scanner_id" name="scanner_id" class="form-control" required>
-                    {% if scan_options and scan_options.scanners %}
-                        {% for scanner in scan_options.scanners %}
-                            <option value="{{ scanner.id }}">{{ scanner.name }}</option>
-                        {% endfor %}
-                    {% else %}
-                        <option value="">No scanners available</option>
-                    {% endif %}
+            <div class="mb-4">
+                <label for="scanner_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    Scanner
+                </label>
+                <select name="scanner_id" id="scanner_id" class="w-full p-2 border rounded" required>
+                    {% for scanner in scan_options.scanners %}
+                    <option value="{{ scanner.id }}">{{ scanner.name }}</option>
+                    {% endfor %}
                 </select>
             </div>
         </div>
         
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Start Scan</button>
-            <a href="{{ url_for('vulnerabilities') }}" class="btn btn-secondary">Cancel</a>
+        <!-- Submit Button -->
+        <div class="flex items-center justify-between">
+            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Start Scan
+            </button>
         </div>
     </form>
+    {% endif %}
 </div>
-{% endblock %}
-{% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+
 <script>
-$(document).ready(function() {
-    // Toggle between new and existing target options
-    $('#target_type').change(function() {
-        if ($(this).val() === 'new') {
-            $('#new-target-options').show();
-            $('#existing-target-options').hide();
-            $('#target_name, #target_hosts').prop('required', true);
-            $('#existing_target_id').prop('required', false);
-        } else {
-            $('#new-target-options').hide();
-            $('#existing-target-options').show();
-            $('#target_name, #target_hosts').prop('required', false);
-            $('#existing_target_id').prop('required', true);
+    // Optional: Add client-side form validation or other functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const existingTargetSelect = document.getElementById('existing_target_id');
+        const targetNameInput = document.getElementById('target_name');
+        const targetHostsInput = document.getElementById('target_hosts');
+        
+        if (existingTargetSelect) {
+            existingTargetSelect.addEventListener('change', function() {
+                const disableInputs = this.value !== '';
+                targetNameInput.disabled = disableInputs;
+                targetHostsInput.disabled = disableInputs;
+                
+                if (disableInputs) {
+                    targetNameInput.classList.add('bg-gray-100');
+                    targetHostsInput.classList.add('bg-gray-100');
+                } else {
+                    targetNameInput.classList.remove('bg-gray-100');
+                    targetHostsInput.classList.remove('bg-gray-100');
+                }
+            });
         }
     });
-});
 </script>
 {% endblock %}
