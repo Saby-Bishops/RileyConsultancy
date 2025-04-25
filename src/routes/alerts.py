@@ -18,7 +18,7 @@ def alerts():
 def clear_alerts():
     try:
         with current_app.db_manager._get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute("DELETE FROM nids_alerts")
             conn.commit()
         flash('All alerts have been cleared', 'success')
@@ -32,7 +32,7 @@ def get_alerts():
     """Fetch alerts data from database"""
     try:
         with current_app.db_manager._get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute("""
                 SELECT id, source_ip, destination_ip, source_port, destination_port, 
                 protocol, threat_type, severity, description, timestamp 
@@ -55,7 +55,7 @@ def get_alerts():
 def export_alerts():
     # Get alerts from database
     with current_app.db_manager._get_connection() as conn:
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM nids_alerts")
         alerts = [dict(row) for row in cursor.fetchall()]
     
@@ -78,7 +78,7 @@ def get_alerts_summary():
     """Get a summary of recent alerts for dashboard"""
     try:
         with current_app.db_manager._get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             
             # Get total count
             cursor.execute("SELECT COUNT(*) as total FROM nids_alerts")
