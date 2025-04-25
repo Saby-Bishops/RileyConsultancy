@@ -6,6 +6,7 @@ import datetime
 import logging
 import dbus
 import os
+from lxml import etree
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,7 +20,6 @@ class GVMScanner:
     def start_gvm_service(self):
         """Try to start the GVM service using D-Bus/systemd API"""
         try:
-            import dbus
             logger.info("Attempting to start GVM service via D-Bus...")
             
             # Connect to the system bus
@@ -52,6 +52,17 @@ class GVMScanner:
     
     def create_connection(self):
         """Create a new connection to GVM"""
+        if not self.check_socket_exists():
+            logger.warning("Socket doesn't exist, attempting to start service")
+            if not self.start_gvm_service():
+                logger.error("Failed to start GVM service")
+                return False
+            
+            # Check again after trying to start
+            if not self.check_socket_exists():
+                logger.error("Socket still doesn't exist after service start attempt")
+                return False
+        
         try:
             connection = UnixSocketConnection(path=self.socket_path)
             transform = EtreeTransform()
@@ -64,18 +75,25 @@ class GVMScanner:
     def authenticate(self, username, password):
         """Authenticate with the GVM service"""
         try:
+            # Make sure gmp is initialized
+            if self.gmp is None:
+                if not self.create_connection():
+                    raise Exception("Failed to create connection to GVM service")
+                    
             self.gmp.authenticate(username, password)
+            logger.info("Successfully authenticated with GVM")
             return True
         except Exception as e:
-            print(f"Authentication error: {e}")
+            logger.error(f"Authentication error: {e}")
             return False
     
-    def create_target(self, name, hosts, comment="Created by ThreatGuard"):
+    def create_target(self, name, hosts, ports, comment="Created by ThreatGuard"):
         """Create a target for scanning"""
         try:
             response = self.gmp.create_target(
                 name=name,
                 hosts=hosts,
+                port_list_id=ports,
                 comment=comment
             )
             target_id = response.get('id')
@@ -114,6 +132,7 @@ class GVMScanner:
             response = self.gmp.get_task(task_id=task_id)
             if response.get('status') != '200':
                 raise Exception(f"Error getting scan status: Status {response.get('status')} {response.get('status_text')}")
+            logger.debug(f"Raw get_task XML response: {etree.tostring(response, pretty_print=True).decode('utf-8')}")
             logger.debug(f"Get Task Response: {response.keys()}")  # Debug log
 
             status = response.xpath('//status/text()')[0]
@@ -134,7 +153,7 @@ class GVMScanner:
             return {"error": "Authentication failed"}
         try:
             response = self.gmp.get_reports()
-            logger.debug(f"Get Reports Response: {response.keys()}")  # Debug log            
+            logger.debug(f"Raw get_reports XML response: {etree.tostring(response, pretty_print=True).decode('utf-8')}")
             # Parse results
             results = []
             result_elements = response.xpath('//report')
@@ -243,7 +262,7 @@ class GVMScanner:
             'targets': targets
         }
         
-    def run_scan(self, username, password, target_name, target_hosts, scan_config_id, scanner_id, existing_target_id=None):
+    def run_scan(self, username, password, target_name, target_hosts, target_ports, scan_config_id, scanner_id, existing_target_id=None):
         """Run a complete scan workflow with specified config and scanner"""
         if not self.authenticate(username, password):
             return {"error": "Authentication failed"}
@@ -253,7 +272,7 @@ class GVMScanner:
             target_id = existing_target_id
         else:
             # Create target
-            target_id = self.create_target(target_name, target_hosts)
+            target_id = self.create_target(target_name, target_hosts, target_ports)
             if not target_id:
                 return {"error": "Failed to create target"}
         

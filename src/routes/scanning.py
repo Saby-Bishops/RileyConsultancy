@@ -5,29 +5,97 @@ import datetime
 logger = logging.getLogger(__name__)
 scan_bp = Blueprint('scanning', __name__)
 
+@scan_bp.route('/scanner_login', methods=['GET', 'POST'])
+def scanner_login():
+    """Generic login route for scanner authentication"""
+    next_url = request.args.get('next', url_for('vulnerabilities.vulnerabilities'))
+    scanner_type = request.args.get('scanner_type', session.get('scanner_type', 'gvm'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '')
+        password = request.form.get('password', '')
+        scanner_type = request.form.get('scanner_type', 'gvm')
+        
+        # Get the appropriate scanner
+        scanner = current_app.scanners.get_scanner(scanner_type)
+        
+        # Verify credentials with scanner
+        result = scanner.test_connection(username, password)
+        
+        if 'error' in result:
+            flash(result['error'], 'error')
+            return render_template('scanner_login.html', next=next_url, scanner_type=scanner_type)
+        
+        # Store credentials and scanner type in session
+        session['scanner_username'] = username
+        session['scanner_password'] = password
+        session['scanner_type'] = scanner_type
+        
+        # Update the app's scanner
+        current_app.scanner = scanner
+        
+        flash(f'Successfully logged in to {scanner_type.upper()} scanner', 'success')
+        
+        # Redirect to the originally requested page
+        return redirect(next_url)
+    
+    # GET request - show login form
+    return render_template('scanner_login.html', next=next_url, scanner_type=scanner_type)
+
+@scan_bp.route('/change_scanner', methods=['GET', 'POST'])
+def change_scanner():
+    """Change the current scanner"""
+    if request.method == 'POST':
+        scanner_type = request.form.get('scanner_type', 'gvm')
+        session['scanner_type'] = scanner_type
+        
+        # Update the app's scanner
+        current_app.scanner = current_app.scanners.get_scanner(scanner_type)
+        
+        flash(f'Switched to {scanner_type.upper()} scanner', 'success')
+        return redirect(url_for('scanning.scan'))
+    
+    # GET request - show scanner selection form
+    return render_template('change_scanner.html', 
+                          current_scanner=session.get('scanner_type', 'gvm'),
+                          scanners=[{'id': 'gvm', 'name': 'GVM Scanner'}, 
+                                   {'id': 'nmap', 'name': 'Nmap Scanner'}])
+
 @scan_bp.route('/scan', methods=['GET', 'POST'])
 def scan():
+    # Make sure user is authenticated with scanner credentials if needed
+    if 'scanner_username' not in session or 'scanner_password' not in session:
+        # Default to empty credentials for scanners that don't need auth
+        session['scanner_username'] = ''
+        session['scanner_password'] = ''
+    
+    # Get scanner type from session or default to the one configured in the app
+    scanner_type = session.get('scanner_type', getattr(current_app.config, 'DEFAULT_SCANNER', 'gvm'))
+    
     # Make sure user is authenticated with GVM
-    if 'gvm_username' not in session or 'gvm_password' not in session:
-        return redirect(url_for('scanning.gvm_login', next=url_for('scanning.scan')))
+    if 'scanner_username' not in session or 'scanner_password' not in session:
+        return redirect(url_for('scanning.scanner_login', next=url_for('scanning.scan')))
     
     if request.method == 'POST':
         # Use stored credentials
-        username = session['gvm_username']
-        password = session['gvm_password']
+        username = session['scanner_username']
+        password = session['scanner_password']
         target_name = request.form.get('target_name')
         target_hosts = request.form.get('target_hosts')
+        target_ports = request.form.get('target_ports')
         scan_config_id = request.form.get('scan_config_id')
         scanner_id = request.form.get('scanner_id')
         existing_target_id = request.form.get('existing_target_id')
         session['scan_start_time'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        session['target'] = target_hosts
         
         # Start the scan
         result = current_app.scanner.run_scan(
             username, 
             password, 
             target_name, 
-            target_hosts, 
+            target_hosts,
+            target_ports,
             scan_config_id, 
             scanner_id,
             existing_target_id
@@ -44,20 +112,21 @@ def scan():
         return redirect(url_for('scanning.scan_status'))
     
     else:
-        # GET request - show form
-        # If credentials are in session, fetch available options
-        if 'gvm_username' in session and 'gvm_password' in session:
-            options = current_app.scanner.get_scan_options(session['gvm_username'], session['gvm_password'])
-            
-            if 'error' in options:
-                flash('Could not load scan options. Please check your credentials.', 'error')
-                scan_options = None
-            else:
-                scan_options = options
-        else:
+        # Get available options from the scanner
+        options = current_app.scanner.get_scan_options(
+            session.get('scanner_username', ''), 
+            session.get('scanner_password', '')
+        )
+        
+        if 'error' in options:
+            flash('Could not load scan options. Please check your credentials.', 'error')
             scan_options = None
+        else:
+            scan_options = options
             
-        return render_template('scan_form.html', scan_options=scan_options)
+        return render_template('scan_form.html', 
+                               scan_options=scan_options, 
+                               scanner_type=scanner_type)
     
 @scan_bp.route('/rescan', methods=['GET', 'POST'])
 def rescan():
@@ -66,27 +135,46 @@ def rescan():
         return redirect(url_for('scanning.scan'))
     
     task_id = session['task_id']
-    target_name = session['target']
-    target_hosts = session['target']
+    target_name = session.get('target', '')
+    target_hosts = session.get('target', '')
 
-    current_app.scanner.start_scan(task_id, target_name, target_hosts)
+    # Re-run the scan with the same parameters
+    result = current_app.scanner.run_scan(
+        session.get('scanner_username', ''),
+        session.get('scanner_password', ''),
+        target_name,
+        target_hosts,
+        '', # No ports specified for rescan
+        '', # Use default scan config
+        '', # Use default scanner
+        None # No existing target
+    )
+    
+    if 'error' in result:
+        flash(result['error'], 'error')
+        return redirect(url_for('scanning.scan'))
+    
+    # Update task_id with the new scan
+    session['task_id'] = result['task_id']
+    session['scan_start_time'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     flash('Rescan started successfully!', 'success')
-    return redirect(url_for('scanning.get_scan_status'))
+    return redirect(url_for('scanning.scan_status'))
 
 
 @scan_bp.route('/get_scan_options', methods=['POST'])
 def get_scan_options():
     """AJAX endpoint to get scan options after user enters credentials"""
-    username = request.form.get('username')
-    password = request.form.get('password')
+    scanner_type = request.form.get('scanner_type', 'gvm')
+    username = request.form.get('username', '')
+    password = request.form.get('password', '')
     
-    if not username or not password:
-        return jsonify({'error': 'Username and password are required'})
+    # Store credentials and scanner type in session
+    session['scanner_username'] = username
+    session['scanner_password'] = password
+    session['scanner_type'] = scanner_type
     
-    # Store credentials in session for convenience
-    session['gvm_username'] = username
-    session['gvm_password'] = password
-    
+    # Get options from the scanner
     options = current_app.scanner.get_scan_options(username, password)
     
     return jsonify(options)
@@ -97,7 +185,7 @@ def scan_status():
         flash('No scan in progress', 'error')
         return redirect(url_for('scanning.scan'))
         
-    status = current_app.scanner.get_scan_status(task_id=session['task_id'], username=session['gvm_username'], password=session['gvm_password'])
+    status = current_app.scanner.get_scan_status(task_id=session['task_id'], username=session['scanner_username'], password=session['scanner_password'])
     
     if status['status'] == 'Done':
         flash('Scan completed successfully!', 'success')
@@ -120,8 +208,8 @@ def get_scan_results():
     if not existing_results:
         # Get results from the scanner
         results = current_app.scanner.get_results(
-            username=session.get('gvm_username'), 
-            password=session.get('gvm_password')
+            username=session.get('scanner_username'), 
+            password=session.get('scanner_password')
         )
         
         if not results or 'error' in results:
@@ -156,32 +244,3 @@ def get_scan_results():
         scan_status="Complete",
         scan_progress=100,
         scan_result="Complete")
-
-@scan_bp.route('/gvm_login', methods=['GET', 'POST'])
-def gvm_login():
-    next_url = request.args.get('next', url_for('vulnerabilities.vulnerabilities'))
-    
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if not username or not password:
-            flash('Username and password are required', 'error')
-            return render_template('gvm_login.html', next=next_url)
-        
-        # Verify credentials with GVM
-        result = current_app.scanner.test_connection(username, password)
-        
-        if 'error' in result:
-            flash(result['error'], 'error')
-            return render_template('gvm_login.html', next=next_url)
-        
-        # Store credentials in session
-        session['gvm_username'] = username
-        session['gvm_password'] = password
-        
-        # Redirect to the originally requested page
-        return redirect(next_url)
-    
-    # GET request - show login form
-    return render_template('gvm_login.html', next=next_url)

@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+
+{% block title %}Scanner Login{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold mb-6">Scanner Login</h1>
+    
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 max-w-md mx-auto">
+        <form action="{{ url_for('scanning.scanner_login', next=next) }}" method="post">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-4">Select Scanner Type</h2>
+                
+                <div class="mb-4">
+                    <label for="scanner_type" class="block text-sm font-medium text-gray-700 mb-2">
+                        Scanner
+                    </label>
+                    <select name="scanner_type" id="scanner_type" class="w-full p-2 border rounded">
+                        <option value="gvm" {% if scanner_type == 'gvm' %}selected{% endif %}>GVM Scanner</option>
+                        <option value="nmap" {% if scanner_type == 'nmap' %}selected{% endif %}>Nmap Scanner</option>
+                    </select>
+                    <p id="nmap-note" class="text-sm text-gray-500 mt-1 {% if scanner_type != 'nmap' %}hidden{% endif %}">
+                        Nmap scanning does not require authentication, but you can provide credentials for record-keeping.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                    Username
+                </label>
+                <input type="text" name="username" id="username" class="w-full p-2 border rounded">
+            </div>
+            
+            <div class="mb-6">
+                <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                    Password
+                </label>
+                <input type="password" name="password" id="password" class="w-full p-2 border rounded">
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                    Connect to Scanner
+                </button>
+                <a href="{{ url_for('scanning.scanner_login') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const scannerTypeSelect = document.getElementById('scanner_type');
+        const nmapNote = document.getElementById('nmap-note');
+        
+        scannerTypeSelect.addEventListener('change', function() {
+            if (this.value === 'nmap') {
+                nmapNote.classList.remove('hidden');
+            } else {
+                nmapNote.classList.add('hidden');
+            }
+        });
+    });
+</script>
+{% endblock %}

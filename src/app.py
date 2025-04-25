@@ -16,7 +16,7 @@ from api.osint.email_search import EmailSearch
 from api.osint.username_search import UsernameSearch
 from api.osint.open_phish import fetch_phishing_urls, extract_domains
 
-from api.recon.gvm_scanner import GVMScanner
+from api.recon.scanner_factory import ScannerFactory
 
 from api.realtime.nids import IntrusionDetectionSystem
 
@@ -34,8 +34,10 @@ app.config.from_object(Config)
 app.db_manager = DBManager(app.config['DATABASE_PATH'])
 app.db_manager._ensure_tables_exist()
 
-# Initialize scanner and store it in app context
-app.scanner = GVMScanner()
+# Use the default scanner specified in the config or fall back to GVM
+default_scanner = getattr(Config, 'DEFAULT_SCANNER', 'gvm')
+app.scanners = ScannerFactory()
+app.scanner = app.scanners.get_scanner(default_scanner)
 
 # Register blueprints
 app.register_blueprint(threats_bp)

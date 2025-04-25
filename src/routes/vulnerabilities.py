@@ -33,9 +33,9 @@ def get_vulnerabilities():
 @vulnerabilities_bp.route('/vulnerabilities')
 def vulnerabilities():
     # Check if GVM credentials are already in session
-    if 'gvm_username' not in session or 'gvm_password' not in session:
+    if 'scanner_username' not in session or 'scanner_password' not in session:
         # No credentials, redirect to GVM login page with a return URL
-        return redirect(url_for('scanning.gvm_login', next=url_for('vulnerabilities.vulnerabilities')))
+        return redirect(url_for('scanning.scanner_login', next=url_for('vulnerabilities.vulnerabilities')))
     
     user_actions = [
         {'url': '/scan', 'icon': 'fa-search', 'text': 'New Scan', 'class': 'scan-btn'},

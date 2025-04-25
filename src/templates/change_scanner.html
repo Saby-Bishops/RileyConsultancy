@@ -1,0 +1,73 @@
+{% extends "layout.html" %}
+
+{% block title %}Change Scanner{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold mb-6">Change Scanner</h1>
+    
+    <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 max-w-md mx-auto">
+        <form action="{{ url_for('scanning.change_scanner') }}" method="post">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-4">Select Scanner Type</h2>
+                
+                <div class="mb-4">
+                    <label for="scanner_type" class="block text-sm font-medium text-gray-700 mb-2">
+                        Scanner
+                    </label>
+                    <select name="scanner_type" id="scanner_type" class="w-full p-2 border rounded">
+                        {% for scanner in scanners %}
+                        <option value="{{ scanner.id }}" {% if scanner.id == current_scanner %}selected{% endif %}>
+                            {{ scanner.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div id="scanner-info" class="mt-4 p-4 bg-gray-100 rounded-lg">
+                    <div id="gvm-info" class="{% if current_scanner != 'gvm' %}hidden{% endif %}">
+                        <h3 class="font-medium text-gray-700">GVM Scanner</h3>
+                        <p class="text-sm text-gray-600 mt-2">
+                            GVM (Greenbone Vulnerability Management) is a comprehensive vulnerability scanning solution. 
+                            It requires a running GVM instance and valid credentials.
+                        </p>
+                    </div>
+                    
+                    <div id="nmap-info" class="{% if current_scanner != 'nmap' %}hidden{% endif %}">
+                        <h3 class="font-medium text-gray-700">Nmap Scanner</h3>
+                        <p class="text-sm text-gray-600 mt-2">
+                            Nmap (Network Mapper) is a free and open-source network scanner. It's lightweight and doesn't 
+                            require any additional setup besides having Nmap installed on the system.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                    Switch Scanner
+                </button>
+                <a href="{{ url_for('scanning.scan') }}" class="text-gray-500 hover:text-gray-700">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const scannerTypeSelect = document.getElementById('scanner_type');
+        const gvmInfo = document.getElementById('gvm-info');
+        const nmapInfo = document.getElementById('nmap-info');
+        
+        scannerTypeSelect.addEventListener('change', function() {
+            if (this.value === 'gvm') {
+                gvmInfo.classList.remove('hidden');
+                nmapInfo.classList.add('hidden');
+            } else if (this.value === 'nmap') {
+                gvmInfo.classList.add('hidden');
+                nmapInfo.classList.remove('hidden');
+            }
+        });
+    });
+</script>
+{% endblock %}
