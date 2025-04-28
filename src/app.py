@@ -206,37 +206,54 @@ def get_stats():
     }
     return jsonify(stats)
 
+def fetch_and_save_phishing():
+    """Fetch and save phishing URLs from OpenPhish"""
+    data = fetch_phishing_urls()
+    if data:
+        app.db_manager.save_phishing_data(data['links'], data['timestamp'])
+        logger.debug(f"Fetched {len(data['links'])} URLs from OpenPhish")
+    else:
+        logger.error("Failed to fetch phishing URLs")
+
 @app.route('/api/trends')
 def get_trends():
     """Fetch trends data for the past 7 days"""
     with app.db_manager.get_cursor() as cursor:
         cursor.execute("""SELECT COUNT(*) AS count 
                             FROM phishing_urls 
-                            WHERE collection_date >= (NOW() - INTERVAL 7 DAY)
+                            WHERE timestamp >= (NOW() - INTERVAL 7 DAY)
                             """)
         result = cursor.fetchone()
-        logger.debug(f"Phishing URLs count in the last 7 days: {result['count'] if result else 0}")
 
-        # If no phishing URLs in the last 7 days, try to fetch from OpenPhish
         if result['count'] == 0:
-            urls, timestamps = fetch_phishing_urls()
-            logger.debug(f"Fetched {len(urls)} URLs from OpenPhish")
-            if urls:
-                # Insert URLs into the database
-                for url in urls:
-                    app.db_manager.insert_to_database('phishing_urls', '(url, collection_date)', (url, timestamps))
-            else:
-                return jsonify({"error": "Failed to fetch phishing URLs"})
-            
-        ph = result['count'] if result else 0
+            logger.debug("No data in database. Fetching phishing URLs.")
+            fetch_and_save_phishing()
 
-    # Generate some random trend data for the past 7 days
-    days = [(datetime.datetime.now() - datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
-    
+        # if a full week of data isn't in the database, and app start time is more than 7 days ago, fetch from OpenPhish
+        if result['count'] < 7 and app.start_time < datetime.datetime.now() - datetime.timedelta(days=7):
+            logger.debug("Less than 7 days of data. Checking for recent phishing urls")
+            # Fetch phishing URLs from OpenPhish
+            fetch_and_save_phishing()
+
+        # Now fetch phishing data grouped by day
+        cursor.execute("""
+            SELECT DATE(timestamp) AS day, COUNT(*) AS count
+            FROM phishing_urls
+            WHERE timestamp >= (NOW() - INTERVAL 7 DAY)
+            GROUP BY day
+            ORDER BY day
+        """)
+        phishing_rows = cursor.fetchall()
+        day_to_count = {row['day'].strftime("%Y-%m-%d"): row['count'] for row in phishing_rows}
+        days = [(datetime.datetime.now() - datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+        phishing_counts = [day_to_count.get(day, 0) for day in days]
+
+        logger.debug(f"Phishing URLs per day in the last 7 days: {phishing_counts}")
+            
     return jsonify({
         "days": days,
         "malware": [random.randint(10, 50) for _ in range(7)],
-        "phishing": [ph],
+        "phishing": phishing_counts,
         "ddos": [random.randint(5, 30) for _ in range(7)],
         "ransomware": [random.randint(2, 15) for _ in range(7)]
     })
@@ -279,6 +296,7 @@ def start_nids_thread(app):
         logger.error(f"Error starting NIDS: {str(e)}")
 
 if __name__ == '__main__':
+    app.start_time = datetime.datetime.now()
     # Only start NIDS if explicitly configured to do so
     if app.config['AUTO_START_NIDS']:
         nids_thread = threading.Thread(target=start_nids_thread, args=(app,))
