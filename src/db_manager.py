@@ -1,128 +1,134 @@
-import sqlite3
 import json
 import pandas as pd
 import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
+import mysql.connector
+from contextlib import contextmanager
 
 class DBManager:
-    def __init__(self, db_path='shopsmart.db'):
+    def __init__(self, conn_settings):
         """Initialize with database connection"""
-        self.db_path = db_path
+        self.conn_settings = conn_settings
         self._ensure_tables_exist()
-        
-    def _get_connection(self):
-        """Get a database connection with row factory"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    
+    @contextmanager
+    def get_cursor(self):
+        conn = mysql.connector.connect(**self.conn_settings)
+        try:
+            cursor = conn.cursor(dictionary=True)
+            yield cursor
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            conn.close()
     
     def _ensure_tables_exist(self):
         """Ensure all necessary database tables exist"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS employees (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    first_name TEXT NOT NULL,
-                    last_name TEXT NOT NULL,
-                    domain TEXT
-                )
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    first_name VARCHAR(255) NOT NULL,
+                    last_name VARCHAR(255) NOT NULL,
+                    domain VARCHAR(255)
+                );
             """)
-            
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS email_results (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    employee_id INTEGER,
-                    email TEXT,
-                    score REAL,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    employee_id INT,
+                    email VARCHAR(255),
+                    score DOUBLE,
                     FOREIGN KEY (employee_id) REFERENCES employees (id)
-                )
+                );
             """)
-            
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS account_findings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    employee_id INTEGER,
-                    username TEXT,
-                    site_name TEXT,
-                    url TEXT,
-                    category TEXT,
-                    http_status INTEGER,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    employee_id INT,
+                    username VARCHAR(255),
+                    site_name VARCHAR(255),
+                    url VARCHAR(2083),
+                    category VARCHAR(255),
+                    http_status INT,
                     found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (employee_id) REFERENCES employees (id)
-                )
+                );
             """)
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS phishing_urls (
-                    id INTEGER PRIMARY KEY,
-                    url TEXT NOT NULL,
-                    collection_date TEXT NOT NULL
-                )
-                ''')
-            
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    url VARCHAR(2083) NOT NULL,
+                    collection_date DATE NOT NULL
+                );
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS gvm_scan_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    task_id TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    total_vulnerabilities INTEGER NOT NULL,
-                    critical_count INTEGER NOT NULL,
-                    high_count INTEGER NOT NULL,
-                    medium_count INTEGER NOT NULL,
-                    low_count INTEGER NOT NULL
-                )
-                ''')
-            
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    task_id VARCHAR(255) NOT NULL,
+                    timestamp DATETIME NOT NULL,
+                    total_vulnerabilities INT NOT NULL,
+                    critical_count INT NOT NULL,
+                    high_count INT NOT NULL,
+                    medium_count INT NOT NULL,
+                    low_count INT NOT NULL
+                );
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS gvm_vulnerabilities (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id INTEGER NOT NULL,
-                    vuln_id TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    host TEXT NOT NULL,
-                    port TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    severity_value REAL NOT NULL,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    session_id INT NOT NULL,
+                    vuln_id VARCHAR(255) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    host VARCHAR(255) NOT NULL,
+                    port VARCHAR(255) NOT NULL,
+                    severity VARCHAR(255) NOT NULL,
+                    severity_value DOUBLE NOT NULL,
                     description TEXT,
-                    cvss_base TEXT,
-                    timestamp TEXT NOT NULL,
+                    cvss_base VARCHAR(255),
+                    timestamp DATETIME NOT NULL,
                     FOREIGN KEY (session_id) REFERENCES gvm_scan_sessions(id)
-                )
-                ''')
-            
+                );
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS nids_alerts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source_ip TEXT,
-                    destination_ip TEXT,
-                    source_port INTEGER,
-                    destination_port INTEGER,
-                    protocol INTEGER,
-                    threat_type TEXT,
-                    severity TEXT,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    source_ip VARCHAR(45),
+                    destination_ip VARCHAR(45),
+                    source_port INT,
+                    destination_port INT,
+                    protocol INT,
+                    threat_type VARCHAR(255),
+                    severity VARCHAR(255),
                     description TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-            
+                );
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    email TEXT UNIQUE,
-                    role TEXT DEFAULT 'user',
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) UNIQUE,
+                    role VARCHAR(50) DEFAULT 'user',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_login TIMESTAMP
-                )
+                    last_login TIMESTAMP NULL
+                );
             ''')
     
     def import_employees_from_csv(self, csv_file_path):
         """Import employees from a CSV file and return stats"""
-        with self._get_connection() as conn:
-            count = 0
+        with self.get_cursor() as cursor:
             table_name = 'employees'
             columns = '(first_name, last_name, domain)'
             
@@ -140,13 +146,11 @@ class DBManager:
                 
                 return {"success": True, "imported_count": count}
             except Exception as e:
-                conn.rollback()
                 return {"success": False, "error": str(e)}
     
     def get_threat_data(self):
         """Get data for the threats page"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             
             cursor.execute("""
                 SELECT
@@ -176,9 +180,7 @@ class DBManager:
     
     def get_employee_details(self, employee_id):
         """Get detailed information for a specific employee"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             # Get employee info
             cursor.execute("""
                 SELECT
@@ -193,12 +195,11 @@ class DBManager:
                 LEFT JOIN
                     email_results er ON e.id = er.employee_id
                 WHERE
-                    e.id = ?
+                    e.id = %s
             """, (employee_id,))
             
             row = cursor.fetchone()
             if not row:
-                conn.close()
                 return None
                 
             employee = dict(row)
@@ -215,7 +216,7 @@ class DBManager:
                 FROM
                     account_findings
                 WHERE
-                    employee_id = ?
+                    employee_id = %s
                 ORDER BY
                     category, site_name
             """, (employee_id,))
@@ -237,29 +238,23 @@ class DBManager:
     
     def add_employee(self, first_name, last_name, domain=None):
         """Add a new employee to the database"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             table_name = 'employees'
             columns = '(first_name, last_name, domain)'
             data = (first_name, last_name, domain)
             
-            self.insert_to_database(table_name, columns, data)
-            employee_id = cursor.lastrowid
-        
+            employee_id = self.insert_to_database(table_name, columns, data)
         return employee_id
     
     def save_email_result(self, employee_id, email, score=None):
         """Save or update email result for an employee"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             table_name = 'email_results'
-            data = (employee_id, email, score)
-            columns = '(employee_id, email, score)'
             
             # Check if email already exists for this employee
             cursor.execute(f"""
                 SELECT id FROM {table_name} 
-                WHERE employee_id = ?
+                WHERE employee_id = %s
             """, (employee_id,))
             
             result = cursor.fetchone()
@@ -268,30 +263,30 @@ class DBManager:
                 # Update existing record
                 cursor.execute(f"""
                     UPDATE {table_name}
-                    SET email = ?, score = ?
-                    WHERE employee_id = ?
-                """, data)
+                    SET email = %s, score = %s
+                    WHERE employee_id = %s
+                """, (email, score, employee_id))
             else:
+                # Insert new record
+                columns = '(employee_id, email, score)'
+                data = (employee_id, email, score)
                 self.insert_to_database(table_name, columns, data)
-        
+            
         return True
     
     def save_account_finding(self, employee_id, username, site_name, url, category=None, http_status=None):
         """Save a new account finding for an employee"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             table_name = 'account_findings'
             columns = '(employee_id, username, site_name, url, category, http_status)'
             data = (employee_id, username, site_name, url, category, http_status)
-            self.insert_to_database(table_name, columns, data)
-            finding_id = cursor.lastrowid
+            finding_id = self.insert_to_database(table_name, columns, data)
         
         return finding_id
     
     def save_gvm_results(self, task_id, gvm_results):
         """Save GVM results for an employee"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             table_name = 'gvm_scan_sessions'
             columns = '(task_id, timestamp, total_vulnerabilities, critical_count, high_count, medium_count, low_count)'
             data = (task_id, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), gvm_results.get('total', 0),
@@ -323,8 +318,7 @@ class DBManager:
     
     def save_alert(self, alert_data):
         """Save an alert to the database"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             table_name = 'nids_alerts'
             columns = '(source_ip, destination_ip, source_port, destination_port, protocol, threat_type, severity, description, timestamp)'
             data = (
@@ -345,20 +339,21 @@ class DBManager:
     
     def insert_to_database(self, table_name, columns, data):
         """Insert data into the specified table"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
+            # Create placeholders string with %s for MySQL
+            placeholders = ', '.join(['%s' for _ in data])
             
             cursor.execute(f"""
                 INSERT INTO {table_name} {columns}
-                VALUES ({', '.join(['?' for _ in data])})
+                VALUES ({placeholders})
             """, data)
-
-            return cursor.lastrowid
+            
+            last_id = cursor.lastrowid
+            return last_id
 
     def show_phishing_urls(self):
         """Fetch and display phishing URLs from the database"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute("SELECT * FROM phishing_urls")
             rows = cursor.fetchall()
             
@@ -369,29 +364,34 @@ class DBManager:
     
     def get_gvm_results(self, task_id):
         """Retrieve GVM results for a specific task"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             
             # First, get the scan session information
             cursor.execute('''
             SELECT id, timestamp, total_vulnerabilities, 
                 critical_count, high_count, medium_count, low_count
             FROM gvm_scan_sessions
-            WHERE id = ?
+            WHERE id = %s
             ''', (task_id,))
             
             session_data = cursor.fetchone()
             if not session_data:
                 return None
                 
-            session_id, timestamp, total, critical, high, medium, low = session_data
+            session_id = session_data['id']
+            timestamp = session_data['timestamp']
+            total = session_data['total_vulnerabilities']
+            critical = session_data['critical_count']
+            high = session_data['high_count']
+            medium = session_data['medium_count']
+            low = session_data['low_count']
             
             # Then get all vulnerabilities for this session
             cursor.execute('''
             SELECT vuln_id, name, host, port, severity, 
                 severity_value, description, cvss_base, timestamp
             FROM gvm_vulnerabilities
-            WHERE session_id = ?
+            WHERE session_id = %s
             ''', (session_id,))
             
             vuln_rows = cursor.fetchall()
@@ -399,17 +399,16 @@ class DBManager:
             # Format results to match the structure from get_results
             results = []
             for row in vuln_rows:
-                vuln_id, name, host, port, severity, severity_value, description, cvss_base, timestamp = row
                 results.append({
-                    'id': vuln_id,
-                    'name': name,
-                    'host': host,
-                    'port': port,
-                    'severity': severity,
-                    'severity_value': severity_value,
-                    'description': description,
-                    'cvss_base': cvss_base,
-                    'timestamp': timestamp
+                    'id': row['vuln_id'],
+                    'name': row['name'],
+                    'host': row['host'],
+                    'port': row['port'],
+                    'severity': row['severity'],
+                    'severity_value': row['severity_value'],
+                    'description': row['description'],
+                    'cvss_base': row['cvss_base'],
+                    'timestamp': row['timestamp']
                 })
             
             # Create summary dictionary
@@ -429,17 +428,15 @@ class DBManager:
         
     def get_user_by_username(self, username):
         """Get user data by username"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+        with self.get_cursor() as cursor:
+            cursor.execute('SELECT * FROM users WHERE username = %s', (username,))
             user = cursor.fetchone()
             return user
             
     def get_user_by_id(self, user_id):
         """Get user data by ID"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        with self.get_cursor() as cursor:
+            cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
             user = cursor.fetchone()
             return user
 
@@ -447,24 +444,20 @@ class DBManager:
         """Create new user with hashed password"""
         password_hash = generate_password_hash(password)
         
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             try:
                 cursor.execute(
-                    'INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)',
+                    'INSERT INTO users (username, password_hash, email, role) VALUES (%s, %s, %s, %s)',
                     (username, password_hash, email, role)
                 )
-                conn.commit()
                 return {"success": True, "user_id": cursor.lastrowid}
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
     def update_last_login(self, user_id):
         """Update user's last login timestamp"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute(
-                'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+                'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = %s',
                 (user_id,)
             )
-            conn.commit()
