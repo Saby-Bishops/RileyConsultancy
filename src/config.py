@@ -1,6 +1,8 @@
 # config.py
 import os
 import secrets
+from dotenv import load_dotenv
+load_dotenv('.env')
 
 class Config:
     # Flask settings
@@ -20,3 +22,11 @@ class Config:
     NIDS_INTERFACE = os.environ.get('NIDS_INTERFACE', INTERFACE_NAME)
 
     DEFAULT_SCANNER = os.environ.get('DEFAULT_SCANNER', 'gvm')  # Default scanner type
+
+    TAILNET_CONNECTION_SETTINGS = {
+            "host": os.getenv("TAILNET_HOST"),
+            "port": os.getenv("TAILNET_PORT"),
+            "user": os.getenv("TAILNET_USER"),
+            "password": os.getenv("TAILNET_PASS"),
+            "db": os.getenv("TAILNET_DB"),
+        }

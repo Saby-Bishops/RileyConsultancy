@@ -43,3 +43,75 @@ CREATE TABLE risk_ratings (
     FOREIGN KEY (threat_id) REFERENCES threats(id),
     FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities(id)
 );
+
+CREATE TABLE employees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    domain TEXT
+);
+
+CREATE TABLE email_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER,
+    email TEXT,
+    score REAL,
+    FOREIGN KEY (employee_id) REFERENCES employees (id)
+);
+
+CREATE TABLE account_findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER,
+    username TEXT,
+    site_name TEXT,
+    url TEXT,
+    category TEXT,
+    http_status INTEGER,
+    found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees (id)
+);
+
+CREATE TABLE phishing_urls (
+    id INTEGER PRIMARY KEY,
+    url TEXT NOT NULL,
+    collection_date TEXT NOT NULL
+);
+
+CREATE TABLE gvm_scan_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    total_vulnerabilities INTEGER NOT NULL,
+    critical_count INTEGER NOT NULL,
+    high_count INTEGER NOT NULL,
+    medium_count INTEGER NOT NULL,
+    low_count INTEGER NOT NULL
+);
+
+CREATE TABLE gvm_vulnerabilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    vuln_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    host TEXT NOT NULL,
+    port TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    severity_value REAL NOT NULL,
+    description TEXT,
+    cvss_base TEXT,
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES gvm_scan_sessions(id)
+);
+
+CREATE TABLE nids_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_ip TEXT,
+    destination_ip TEXT,
+    source_port INTEGER,
+    destination_port INTEGER,
+    protocol INTEGER,
+    threat_type TEXT,
+    severity TEXT,
+    description TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);

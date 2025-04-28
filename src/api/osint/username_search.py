@@ -2,22 +2,12 @@ import os
 import requests
 import json
 import concurrent.futures
-import sqlite3
 from urllib.parse import quote
 from tqdm import tqdm
 
 class UsernameSearch:
-    def __init__(self, db_path='osint.db', data_file='whatsmyname_data.json'):
+    def __init__(self, data_file='whatsmyname_data.json'):
         """Initialize with the path to the WhatsMyName data file and database"""
-        # Connect to the database
-        self.db_path = db_path
-        self.conn = sqlite3.connect(db_path)
-        self.conn.row_factory = sqlite3.Row
-        self.cursor = self.conn.cursor()
-        
-        # Ensure the database schema exists
-        self._init_db()
-        
         # Load WhatsMyName data
         if not os.path.exists(data_file):
             self.fetch_wmn_data()
@@ -27,44 +17,6 @@ class UsernameSearch:
         
         self.sites = data.get('sites', [])
         self.categories = data.get('categories', [])
-    
-    def _init_db(self):
-        """Initialize database tables if they don't exist"""
-        with open('schema.sql', 'r') as f:
-            schema = f.read()
-            self.conn.executescript(schema)
-            self.conn.commit()
-    
-    def get_employee_id(self, first_name, last_name, domain):
-        """Get employee ID from the database or create a new record"""
-        # Check if employee exists
-        self.cursor.execute(
-            "SELECT id FROM employees WHERE first_name = ? AND last_name = ? AND domain = ?",
-            (first_name, last_name, domain)
-        )
-        result = self.cursor.fetchone()
-        
-        if result:
-            return result['id']
-        
-        # Create new employee record
-        self.cursor.execute(
-            "INSERT INTO employees (first_name, last_name, domain) VALUES (?, ?, ?)",
-            (first_name, last_name, domain)
-        )
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def save_account_finding(self, employee_id, username, site_name, url, category, http_status=None):
-        """Save an account finding to the database"""
-        self.cursor.execute(
-            """
-            INSERT INTO account_findings (employee_id, username, site_name, url, category, http_status)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (employee_id, username, site_name, url, category, http_status)
-        )
-        self.conn.commit()
     
     def search_username(self, username, employee_id=None, first_name=None, last_name=None, domain=None, 
                         max_concurrent=10, timeout=10, categories=None):
@@ -227,29 +179,6 @@ class UsernameSearch:
         if stats['errors'] > 0:
             print(f"\n{stats['errors']} errors occurred during the search")
     
-    def get_all_findings(self):
-        """Get all findings from the database with employee information"""
-        self.cursor.execute("""
-            SELECT 
-                e.id as employee_id,
-                e.first_name,
-                e.last_name,
-                e.domain,
-                af.username,
-                COUNT(af.id) as account_count,
-                GROUP_CONCAT(af.site_name, ', ') as sites
-            FROM 
-                employees e
-            LEFT JOIN 
-                account_findings af ON e.id = af.employee_id
-            GROUP BY 
-                e.id, af.username
-            ORDER BY 
-                e.last_name, e.first_name, account_count DESC
-        """)
-        
-        return [dict(row) for row in self.cursor.fetchall()]
-    
     def fetch_wmn_data(self):
         """Fetch the latest WhatsMyName data"""
         url = "https://raw.githubusercontent.com/WebBreacher/WhatsMyName/refs/heads/main/wmn-data.json"
@@ -266,8 +195,3 @@ class UsernameSearch:
             json.dump(data, f, indent=2)
         
         return data
-    
-    def __del__(self):
-        """Close database connection when object is destroyed"""
-        if hasattr(self, 'conn'):
-            self.conn.close()

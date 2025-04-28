@@ -1,19 +1,20 @@
 import requests
 from datetime import datetime
 from urllib.parse import urlparse
+import os
 
 def fetch_phishing_urls():
     # URL to the OpenPhish feed
-    url = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
+    data_path = os.path.join(os.path.dirname(__file__), 'data')
+    file_path = os.path.join(data_path, 'ALL-phishing-domains.lst')
     
     try:
-        # Fetch the content
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        
-        # Get all URLs as a list (one URL per line)
-        phishing_urls = response.text.strip().split('\n')
-        
+        with open(file_path, 'r') as file:
+            # Read the entire content of the file
+            content = file.read()
+            phishing_urls = content.splitlines()
+            # Remove any empty lines
+            phishing_urls = [url for url in phishing_urls if url.strip()]
         # Add timestamp for when this data was collected
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
