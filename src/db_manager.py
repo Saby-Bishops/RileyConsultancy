@@ -65,7 +65,7 @@ class DBManager:
                 CREATE TABLE IF NOT EXISTS phishing_urls (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     url VARCHAR(2083) NOT NULL,
-                    collection_date DATE NOT NULL
+                    timestamp DATE NOT NULL
                 );
             ''')
 
@@ -334,6 +334,18 @@ class DBManager:
             )
             
             self.insert_to_database(table_name, columns, data)
+        
+        return True
+    
+    def save_phishing_data(self, urls, timestamp):
+        """Save phishing data to the database"""
+        with self.get_cursor() as cursor:
+            table_name = 'phishing_urls'
+            columns = '(url, timestamp)'
+            
+            for url in urls:
+                data = (url, timestamp)
+                self.insert_to_database(table_name, columns, data)
         
         return True
     
