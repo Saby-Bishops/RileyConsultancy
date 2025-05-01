@@ -31,7 +31,7 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 # Initialize database
-app.db_manager = DBManager(app.config['DATABASE_PATH'])
+app.db_manager = DBManager()
 app.db_manager._ensure_tables_exist()
 
 # Use the default scanner specified in the config or fall back to GVM
@@ -163,7 +163,7 @@ def get_stats():
 def get_trends():
     """Fetch trends data for the past 7 days"""
     with app.db_manager._get_connection() as conn:
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT COUNT(*) as count FROM phishing_urls WHERE collection_date >= DATE('now', '-7 days')")
         result = cursor.fetchone()
         logger.debug(f"Phishing URLs count in the last 7 days: {result['count'] if result else 0}")
