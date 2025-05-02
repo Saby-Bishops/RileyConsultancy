@@ -2,7 +2,30 @@
 import os
 import secrets
 from dotenv import load_dotenv
-load_dotenv('.env')
+import logging
+from pathlib import Path
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Find and load .env file - checking multiple possible locations
+env_paths = [
+    '.env',  # Current directory
+    '../.env',  # Parent directory
+    Path(__file__).parent / '.env',  # Same directory as this file
+    Path(__file__).parent.parent / '.env',  # Parent of this file's directory
+]
+
+loaded = False
+for env_path in env_paths:
+    if os.path.isfile(env_path):
+        logger.info(f"Loading environment variables from: {env_path}")
+        load_dotenv(env_path)
+        loaded = True
+        break
+
+if not loaded:
+    logger.warning("No .env file found! Using environment variables as is.")
 
 class Config:
     # Flask settings

@@ -22,7 +22,8 @@ from api.recon.scanner_factory import ScannerFactory
 
 from api.realtime.nids import IntrusionDetectionSystem
 
-from db_manager import DBManager
+from db.db_manager import DBManager
+from db.db_connector import DBConnector
 from config import Config
 
 # Configure logging
@@ -32,8 +33,20 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Debug environment variables
+logger.debug("Environment variables for database connection:")
+for key in ["TAILNET_HOST", "TAILNET_PORT", "TAILNET_USER", "TAILNET_PASS", "TAILNET_DB"]:
+    value = os.environ.get(key)
+    # Don't log the actual password value
+    if key == "TAILNET_PASS" and value:
+        logger.debug(f"{key}: [REDACTED]")
+    else:
+        logger.debug(f"{key}: {value}")
+
 # Initialize database
-app.db_manager = DBManager(app.config['TAILNET_CONNECTION_SETTINGS'])
+print(app.config['TAILNET_CONNECTION_SETTINGS'])
+connector = DBConnector(app.config['TAILNET_CONNECTION_SETTINGS'])
+app.db_manager = DBManager(connector)
 app.db_manager._ensure_tables_exist()
 
 # Use the default scanner specified in the config or fall back to GVM
@@ -208,10 +221,16 @@ def get_stats():
 
 def fetch_and_save_phishing():
     """Fetch and save phishing URLs from OpenPhish"""
-    data = fetch_phishing_urls()
+    domains_fn = 'ALL-phishing-domains.lst'
+    links_fn = 'ALL-phishing-links.lst'
+    base_url = 'https://phish.co.za/latest/'
+    domains_url = base_url + domains_fn
+    links_url = base_url + links_fn
+    #data = fetch_phishing_urls(domains_url, domains_fn)
+    data = fetch_phishing_urls(links_url, links_fn)
     if data:
-        app.db_manager.save_phishing_data(data['links'], data['timestamp'])
-        logger.debug(f"Fetched {len(data['links'])} URLs from OpenPhish")
+        app.db_manager.save_phishing_data(data['content'], data['timestamp'])
+        logger.debug(f"Fetched {len(data['content'])} URLs from OpenPhish")
     else:
         logger.error("Failed to fetch phishing URLs")
 
@@ -225,6 +244,7 @@ def get_trends():
                             """)
         result = cursor.fetchone()
 
+        # if no data in database, fetch from github data
         if result['count'] == 0:
             logger.debug("No data in database. Fetching phishing URLs.")
             fetch_and_save_phishing()
