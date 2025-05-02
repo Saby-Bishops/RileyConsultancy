@@ -5,7 +5,7 @@ from routes.alerts import alerts_bp
 from routes.scanning import scan_bp
 
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, current_app, session
-import datetime
+from datetime import datetime, timedelta
 import random
 import os
 import logging
@@ -26,6 +26,8 @@ from db.db_manager import DBManager
 from db.db_connector import DBConnector
 from config import Config
 
+from llm.report_generation import ThreatIntelligenceReportGenerator
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -44,7 +46,6 @@ for key in ["TAILNET_HOST", "TAILNET_PORT", "TAILNET_USER", "TAILNET_PASS", "TAI
         logger.debug(f"{key}: {value}")
 
 # Initialize database
-print(app.config['TAILNET_CONNECTION_SETTINGS'])
 connector = DBConnector(app.config['TAILNET_CONNECTION_SETTINGS'])
 app.db_manager = DBManager(connector)
 app.db_manager._ensure_tables_exist()
@@ -53,6 +54,28 @@ app.db_manager._ensure_tables_exist()
 default_scanner = getattr(Config, 'DEFAULT_SCANNER', 'gvm')
 app.scanners = ScannerFactory()
 app.scanner = app.scanners.get_scanner(default_scanner)
+
+# Add this to your app configuration
+app.config['REPORTS_DIR'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+os.makedirs(app.config['REPORTS_DIR'], exist_ok=True)
+
+app.report_generator = ThreatIntelligenceReportGenerator(
+    db_manager=app.db_manager,
+    model_endpoint='http://'+ app.config['TAILNET_CONNECTION_SETTINGS']['host'] + ':' + app.config['LLM_PORT'],
+    output_dir=app.config['REPORTS_DIR']
+)
+
+# Route for the analytics page
+@app.route('/analytics')
+def analytics():
+    # Check if user is logged in (if you have authentication)
+    if 'user_id' not in session and app.config.get('REQUIRE_LOGIN', True):
+        return redirect(url_for('login', next=request.path))
+        
+    return render_template(
+        'analytics.html', 
+        show_last_updated=True
+    )
 
 # Register blueprints
 app.register_blueprint(threats_bp)
@@ -134,7 +157,7 @@ def run_scan_thread(username, password, target_name, target_hosts):
         scan_results['results'] = results['results']
         scan_results['summary'] = results['summary']
         scan_results['total'] = results['total']
-        scan_results['last_scan'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        scan_results['last_scan'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         scan_results['status'] = 'Completed'
         app.scanner.results.append(scan_results)
     except Exception as e:
@@ -250,7 +273,7 @@ def get_trends():
             fetch_and_save_phishing()
 
         # if a full week of data isn't in the database, and app start time is more than 7 days ago, fetch from OpenPhish
-        if result['count'] < 7 and app.start_time < datetime.datetime.now() - datetime.timedelta(days=7):
+        if result['count'] < 7 and app.start_time < datetime.now() - timedelta(days=7):
             logger.debug("Less than 7 days of data. Checking for recent phishing urls")
             # Fetch phishing URLs from OpenPhish
             fetch_and_save_phishing()
@@ -265,7 +288,7 @@ def get_trends():
         """)
         phishing_rows = cursor.fetchall()
         day_to_count = {row['day'].strftime("%Y-%m-%d"): row['count'] for row in phishing_rows}
-        days = [(datetime.datetime.now() - datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+        days = [(datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
         phishing_counts = [day_to_count.get(day, 0) for day in days]
 
         logger.debug(f"Phishing URLs per day in the last 7 days: {phishing_counts}")
@@ -315,8 +338,199 @@ def start_nids_thread(app):
     except Exception as e:
         logger.error(f"Error starting NIDS: {str(e)}")
 
+@app.route('/api/generate_report', methods=['POST'])
+def generate_report():
+    try:
+        data = request.json
+        
+        # Extract parameters from request
+        report_type = data.get('report_type', 'comprehensive')
+        days = int(data.get('days', 30))
+        threat_types = data.get('threat_types', None)
+        
+        # Set date range
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        
+        # Fetch data
+        threat_data = app.report_generator.fetch_threat_data(
+            start_date=start_date,
+            end_date=end_date,
+            threat_types=threat_types
+        )
+        
+        # Generate report
+        report = app.report_generator.generate_report(
+            threat_data=threat_data,
+            report_type=report_type,
+            max_length=4096
+        )
+        
+        # Save report
+        filepath = app.report_generator.save_report(
+            report=report,
+            report_type=report_type
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Report generated successfully',
+            'filepath': filepath,
+            'report_content': report
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating report: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500       
+
+@app.route('/api/reports', methods=['GET'])
+def get_reports():
+    """
+    Retrieve all generated reports from the database
+    
+    Returns:
+        JSON response with list of reports
+    """
+    try:
+        with app.db_manager.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT id, name, type, filepath, created_at, days_range, threat_types
+                FROM reports
+                ORDER BY created_at DESC
+            """)
+            
+            reports = []
+            for row in cursor.fetchall():
+                reports.append({
+                    'id': row[0],
+                    'name': row[1],
+                    'type': row[2],
+                    'filepath': row[3],
+                    'created_at': row[4].isoformat() if row[4] else None,
+                    'days_range': row[5],
+                    'threat_types': row[6]
+                })
+            
+            return jsonify({
+                'status': 'success',
+                'reports': reports
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error retrieving reports: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+    
+@app.route('/api/reports/<int:report_id>', methods=['GET'])
+def get_report(report_id):
+    """
+    Retrieve a specific report by ID
+    
+    Args:
+        report_id: ID of the report to retrieve
+        
+    Returns:
+        JSON response with report data
+    """
+    try:
+        with app.db_manager.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT id, name, type, filepath, created_at, days_range, threat_types
+                FROM reports
+                WHERE id = %s
+            """, (report_id,))
+            
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Report not found'
+                }), 404
+            
+            report = {
+                'id': row[0],
+                'name': row[1],
+                'type': row[2],
+                'filepath': row[3],
+                'created_at': row[4].isoformat() if row[4] else None,
+                'days_range': row[5],
+                'threat_types': row[6]
+            }
+            
+            # Get report content
+            try:
+                with open(os.path.join(app.root_path, report['filepath']), 'r', encoding='utf-8') as f:
+                    report_content = f.read()
+            except Exception as e:
+                app.logger.error(f"Error reading report file: {e}")
+                report_content = "Error: Could not read report file"
+            
+            return jsonify({
+                'status': 'success',
+                'report': report,
+                'content': report_content
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error retrieving report: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/reports/<int:report_id>', methods=['DELETE'])
+def delete_report(report_id):
+    """
+    Delete a specific report by ID
+    
+    Args:
+        report_id: ID of the report to delete
+        
+    Returns:
+        JSON response indicating success or failure
+    """
+    try:
+        with app.db_manager.get_cursor() as cursor:
+            # First, get the filepath
+            cursor.execute("SELECT filepath FROM reports WHERE id = %s", (report_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Report not found'
+                }), 404
+            
+            filepath = row[0]
+            
+            # Delete from database
+            cursor.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+            
+            # Delete file from filesystem
+            try:
+                os.remove(os.path.join(app.root_path, filepath))
+            except OSError as e:
+                app.logger.warning(f"Could not delete report file: {e}")
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Report deleted successfully'
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error deleting report: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 if __name__ == '__main__':
-    app.start_time = datetime.datetime.now()
+    app.start_time = datetime.now()
     # Only start NIDS if explicitly configured to do so
     if app.config['AUTO_START_NIDS']:
         nids_thread = threading.Thread(target=start_nids_thread, args=(app,))

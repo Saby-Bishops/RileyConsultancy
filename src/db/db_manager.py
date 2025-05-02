@@ -1,6 +1,7 @@
 import datetime
 from werkzeug.security import generate_password_hash
 from contextlib import contextmanager
+from typing import List, Dict, Any, Optional
 
 from db.db_repo import DBRepository
 from db.db_connector import DBConnector
@@ -125,6 +126,36 @@ class DBManager:
                     last_login TIMESTAMP NULL
                 );
             ''')
+
+            # Create OSINT data table if it doesn't exist
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS osint_data (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    source VARCHAR(255) NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    threat_type VARCHAR(255),
+                    confidence FLOAT,
+                    url VARCHAR(2083),
+                    ioc_type VARCHAR(255),
+                    ioc_value TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    tags TEXT,
+                    metadata TEXT
+                );
+            ''')
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS reports (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    filepath VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    days_range INT NOT NULL,
+                    threat_types TEXT
+                );
+            """)
     
     def get_repository(self, table_name):
         """
@@ -164,6 +195,9 @@ class DBManager:
         
     def users(self):
         return self.get_repository('users')
+    
+    def osint_data(self):
+        return self.get_repository('osint_data')
     
     # Compatibility methods with original API
     def save_email_result(self, employee_id, email, score=None):
@@ -315,3 +349,276 @@ class DBManager:
             'last_login': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         return self.users().update(user_id, data)
+    
+    def get_osint_data(self, start_date: Optional[str] = None, end_date: Optional[str] = None, 
+                   threat_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve OSINT data from the database with optional filtering.
+        
+        Args:
+            start_date: Optional start date filter (YYYY-MM-DD)
+            end_date: Optional end date filter (YYYY-MM-DD)
+            threat_types: Optional list of threat types to filter
+            
+        Returns:
+            List of OSINT data entries matching the criteria
+        """
+        query = "SELECT * FROM osint_data WHERE 1=1"
+        params = []
+        
+        # Add date filters if provided
+        if start_date:
+            query += " AND timestamp >= %s"
+            params.append(start_date + " 00:00:00")
+            
+        if end_date:
+            query += " AND timestamp <= %s"
+            params.append(end_date + " 23:59:59")
+            
+        # Add threat types filter if provided
+        if threat_types and len(threat_types) > 0:
+            placeholders = ', '.join(['%s'] * len(threat_types))
+            query += f" AND threat_type IN ({placeholders})"
+            params.extend(threat_types)
+            
+        # Add order by timestamp
+        query += " ORDER BY timestamp DESC"
+        
+        # Execute query and get results
+        with self.get_cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            
+        # Convert results to list of dictionaries
+        osint_data = []
+        for row in results:
+            osint_data.append({
+                'id': row[0],
+                'source': row[1],
+                'title': row[2],
+                'description': row[3],
+                'threat_type': row[4],
+                'confidence': row[5],
+                'url': row[6],
+                'ioc_type': row[7],
+                'ioc_value': row[8],
+                'timestamp': row[9].isoformat() if row[9] else None,
+                'tags': row[10].split(',') if row[10] else [],
+                'metadata': row[11]
+            })
+        
+        return osint_data
+
+    def get_vulnerabilities(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve vulnerability data from the database with optional filtering.
+        
+        Args:
+            start_date: Optional start date filter (YYYY-MM-DD)
+            end_date: Optional end date filter (YYYY-MM-DD)
+            
+        Returns:
+            List of vulnerability entries matching the criteria
+        """
+        query = """
+            SELECT v.*, s.task_id 
+            FROM gvm_vulnerabilities v
+            JOIN gvm_scan_sessions s ON v.session_id = s.id
+            WHERE 1=1
+        """
+        params = []
+        
+        # Add date filters if provided
+        if start_date:
+            query += " AND v.timestamp >= %s"
+            params.append(start_date + " 00:00:00")
+            
+        if end_date:
+            query += " AND v.timestamp <= %s"
+            params.append(end_date + " 23:59:59")
+            
+        # Add order by severity value (descending) and timestamp
+        query += " ORDER BY v.severity_value DESC, v.timestamp DESC"
+        
+        # Execute query and get results
+        with self.get_cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            
+        # Convert results to list of dictionaries
+        vulnerabilities = []
+        for row in results:
+            vulnerabilities.append({
+                'id': row[0],
+                'session_id': row[1],
+                'vuln_id': row[2],
+                'name': row[3],
+                'host': row[4],
+                'port': row[5],
+                'severity': row[6],
+                'severity_value': row[7],
+                'description': row[8],
+                'cvss_base': row[9],
+                'timestamp': row[10].isoformat() if row[10] else None,
+                'task_id': row[11]
+            })
+        
+        return vulnerabilities
+
+    def get_network_traffic(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve network traffic data from the database with optional filtering.
+        
+        Args:
+            start_date: Optional start date filter (YYYY-MM-DD)
+            end_date: Optional end date filter (YYYY-MM-DD)
+            
+        Returns:
+            List of network traffic entries matching the criteria
+        """
+        query = "SELECT * FROM nids_alerts WHERE 1=1"
+        params = []
+        
+        # Add date filters if provided
+        if start_date:
+            query += " AND timestamp >= %s"
+            params.append(start_date + " 00:00:00")
+            
+        if end_date:
+            query += " AND timestamp <= %s"
+            params.append(end_date + " 23:59:59")
+            
+        # Add order by timestamp
+        query += " ORDER BY timestamp DESC"
+        
+        # Execute query and get results
+        with self.get_cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            
+        # Convert results to list of dictionaries
+        network_traffic = []
+        for row in results:
+            network_traffic.append({
+                'id': row[0],
+                'source_ip': row[1],
+                'destination_ip': row[2],
+                'source_port': row[3],
+                'destination_port': row[4],
+                'protocol': row[5],
+                'threat_type': row[6],
+                'severity': row[7],
+                'description': row[8],
+                'timestamp': row[9].isoformat() if row[9] else None,
+            })
+        
+        return network_traffic
+
+    def get_threat_actors(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve threat actor data from the osint_data table with filtering.
+        This implementation assumes threat actors are stored in the osint_data table
+        with a specific tag or threat_type.
+        
+        Args:
+            start_date: Optional start date filter (YYYY-MM-DD)
+            end_date: Optional end date filter (YYYY-MM-DD)
+            
+        Returns:
+            List of threat actor entries matching the criteria
+        """
+        # For this implementation, we'll extract threat actors from the osint_data table
+        # Assuming threat actors have 'threat_actor' in their tags or a specific threat_type
+        query = """
+            SELECT * FROM osint_data 
+            WHERE (tags LIKE %s OR metadata LIKE %s) 
+        """
+        params = ['%threat_actor%', '%threat_actor%']
+        
+        # Add date filters if provided
+        if start_date:
+            query += " AND timestamp >= %s"
+            params.append(start_date + " 00:00:00")
+            
+        if end_date:
+            query += " AND timestamp <= %s"
+            params.append(end_date + " 23:59:59")
+            
+        # Add order by timestamp
+        query += " ORDER BY timestamp DESC"
+        
+        # Execute query and get results
+        with self.get_cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            
+        # Convert results to list of dictionaries
+        threat_actors = []
+        for row in results:
+            threat_actors.append({
+                'id': row[0],
+                'source': row[1],
+                'name': row[2],  # Using title as the actor name
+                'description': row[3],
+                'threat_type': row[4],
+                'confidence': row[5],
+                'url': row[6],
+                'timestamp': row[9].isoformat() if row[9] else None,
+                'tags': row[10].split(',') if row[10] else [],
+                'metadata': row[11]
+            })
+        
+        return threat_actors
+
+    def get_indicators_of_compromise(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve indicators of compromise (IOCs) from the osint_data table with filtering.
+        
+        Args:
+            start_date: Optional start date filter (YYYY-MM-DD)
+            end_date: Optional end date filter (YYYY-MM-DD)
+            
+        Returns:
+            List of IOC entries matching the criteria
+        """
+        # For this implementation, we'll extract IOCs from the osint_data table
+        # We'll look for entries that have an ioc_type and ioc_value
+        query = "SELECT * FROM osint_data WHERE ioc_type IS NOT NULL AND ioc_type != ''"
+        params = []
+        
+        # Add date filters if provided
+        if start_date:
+            query += " AND timestamp >= %s"
+            params.append(start_date + " 00:00:00")
+            
+        if end_date:
+            query += " AND timestamp <= %s"
+            params.append(end_date + " 23:59:59")
+            
+        # Add order by timestamp
+        query += " ORDER BY timestamp DESC"
+        
+        # Execute query and get results
+        with self.get_cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            
+        # Convert results to list of dictionaries
+        iocs = []
+        for row in results:
+            iocs.append({
+                'id': row[0],
+                'source': row[1],
+                'title': row[2],
+                'description': row[3],
+                'threat_type': row[4],
+                'confidence': row[5],
+                'url': row[6],
+                'ioc_type': row[7],
+                'ioc_value': row[8],
+                'timestamp': row[9].isoformat() if row[9] else None,
+                'tags': row[10].split(',') if row[10] else [],
+                'metadata': row[11]
+            })
+        
+        return iocs

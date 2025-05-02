@@ -53,3 +53,5 @@ class Config:
             "password": os.getenv("TAILNET_PASS"),
             "db": os.getenv("TAILNET_DB"),
         }
+    
+    LLM_PORT = os.environ.get('LLM_PORT')
