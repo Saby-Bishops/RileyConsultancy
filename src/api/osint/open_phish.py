@@ -16,33 +16,22 @@ def read_file(file_path):
     
     return lines
 
-def fetch_phishing_urls():
-    # URL to the OpenPhish feed
-    domain_fn = 'ALL-phishing-domains.lst'
-    links_fn = 'ALL-phishing-links.lst'
-    domains_url = f'https://phish.co.za/latest/{domain_fn}'
-    links_url = f'https://phish.co.za/latest/{links_fn}'
+def fetch_phishing_urls(url, file_name):
     data_path = os.path.join(os.path.dirname(__file__), 'data')
-    domains_path = os.path.join(data_path, domain_fn)
-    links_path = os.path.join(data_path, links_fn)
+    file_path = os.path.join(data_path, file_name)
 
     # Fetch the phishing domains and links
-    if not os.path.exists(domains_path):
-        response = requests.get(domains_url)
-        with open(domains_path, 'wb') as file:
-            file.write(response.content)
-    if not os.path.exists(links_path):
-        response = requests.get(links_url)
-        with open(links_path, 'wb') as file:
+    if not os.path.exists(file_path):
+        response = requests.get(url)
+        with open(file_path, 'wb') as file:
             file.write(response.content)
     
     try:
-        domains = read_file(domains_path)
-        links = read_file(links_path)
+        content = read_file(file_path)
         # Add timestamp for when this data was collected
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        return {"timestamp": timestamp, "domains": domains, "links": links}
+        return {"timestamp": timestamp, "content": content}
     
     except requests.RequestException as e:
         print(f"Error fetching phishing URLs: {e}")
