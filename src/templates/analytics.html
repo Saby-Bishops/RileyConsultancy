@@ -1,0 +1,149 @@
+{% extends "layout.html" %}
+{% block title %}Threat Intelligence Analytics{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/analytics.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="analytics-container">
+    <div class="page-header">
+        <h1><i class="fas fa-chart-line"></i> Threat Intelligence Analytics</h1>
+        <p>Generate and view comprehensive threat intelligence reports</p>
+    </div>
+
+    <div class="analytics-grid">
+        <div class="report-generator card">
+            <div class="card-header">
+                <h2>Generate New Report</h2>
+            </div>
+            <div class="card-body">
+                <form id="report-form">
+                    <div class="form-group">
+                        <label for="report-type">Report Type</label>
+                        <select id="report-type" name="report-type" class="form-control">
+                            <option value="comprehensive">Comprehensive</option>
+                            <option value="executive">Executive Summary</option>
+                            <option value="technical">Technical Details</option>
+                            <option value="vulnerabilities">Vulnerabilities Only</option>
+                            <option value="threat-actors">Threat Actors Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="time-range">Time Range</label>
+                        <select id="time-range" name="time-range" class="form-control">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30" selected>Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                            <option value="180">Last 6 Months</option>
+                            <option value="365">Last Year</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Threat Types to Include</label>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="malware" name="threat-types" value="malware" checked>
+                                <label for="malware">Malware</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="phishing" name="threat-types" value="phishing" checked>
+                                <label for="phishing">Phishing</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="ransomware" name="threat-types" value="ransomware" checked>
+                                <label for="ransomware">Ransomware</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="apt" name="threat-types" value="apt" checked>
+                                <label for="apt">APT</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="ddos" name="threat-types" value="ddos" checked>
+                                <label for="ddos">DDoS</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="vulnerability" name="threat-types" value="vulnerability" checked>
+                                <label for="vulnerability">Vulnerability</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="intrusion" name="threat-types" value="intrusion" checked>
+                                <label for="intrusion">Intrusion</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" id="generate-report" class="btn btn-primary">
+                            <i class="fas fa-file-alt"></i> Generate Report
+                        </button>
+                    </div>
+                </form>
+                <div id="report-status" class="alert" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="reports-list card">
+            <div class="card-header">
+                <h2>Recent Reports</h2>
+            </div>
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="reports-table">
+                        <thead>
+                            <tr>
+                                <th>Report Name</th>
+                                <th>Type</th>
+                                <th>Date Generated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reports-list-body">
+                            <tr>
+                                <td colspan="4" class="loading-cell">Loading reports...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="report-preview-container" class="report-preview" style="display: none;">
+        <div class="report-preview-header">
+            <h2>Report Preview</h2>
+            <div class="report-actions">
+                <button id="download-report" class="btn btn-secondary">
+                    <i class="fas fa-download"></i> Download
+                </button>
+                <button id="close-preview" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+        <div id="report-content" class="report-content">
+            <!-- Report content will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<!-- Report generation modal -->
+<div id="report-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Generating Report</h2>
+            <span class="close-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="progress-text">Processing threat intelligence data...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+{% endblock %}
